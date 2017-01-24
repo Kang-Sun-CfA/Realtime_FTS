@@ -1,0 +1,42 @@
+Input-File for Sun_Pos_2.exe
+
+Note: The Earth-Orientation parameter file can be downloaded here:
+http://hpiers.obspm.fr/iers/eop/eopc04/eopc04.62-now
+
+Needed input:
+- Year (e.g. 2010) (if only 2 digits, then <80 is interpreted as 20xx, >=80 as 19xx)
+- Month (1-12)
+- Day
+- Hour (0-23)[Integer] (can also be from -1 to 47)
+- Minute (0-59)[Integer]
+- Second (0.0-60.0)[Float]
+Observer Position:
+Option 1:
+- latitude (degree, North is positive, South is negative, [Karlsruhe: 49.1])
+- longitude (degree, East is positive, West is negative, [Karlsruhe: 8.44])
+- altitude [km]
+Option 2:
+- name of station as given in station_list.inp. (E.g. Karlsruhe)
+
+$1
+2016
+6
+24
+19.000000
+28.000000
+25.551500
+39.766667
+-86.150000
+0.220000
+
+
+
+Optional input:
+- Include refraction: (0:false, 1:true)
+- path to "pt.prf"-file  Use . if it is in same folder than sun_pos_2.exe)
+- SUN or MOON
+
+$2
+1
+C:\FTS\em27spectra\160624\pt
+SUN

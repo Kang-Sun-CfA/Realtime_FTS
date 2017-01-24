@@ -1,0 +1,21 @@
+Calculation of Sun-Position
+for day [yyyy mm dd]: 2016/6/24 at time (UTC) [hh:mm:ss.sss]:19:28:25.5515
+which is the Julian Date: 2457564.311407
+
+Observer location:
+Longitude: -86.150000 (West of Greenwich)
+Latitude:  39.766667
+Height [km]: 0.220000
+
+LeapSeconds: 66.184000  ut1-utc: -0.568435
+WARNING: correct value (UTC-UT1) could not be determined for given day. Closest value ist taken.
+Maybe requested Day is out of range of current EOP-File.
+Try downloading new file from: http://hpiers.obspm.fr/iers/eop/eopc04/eopc04.62-now
+
+Result:
+Azimuth [degrees]: 60.092465 (south=0, west=90,...)
+Elevation [degrees] without refraction: 63.082914
+PT-File used: C:\FTS\em27spectra\160624\pt\pt.prf
+Pt-profile read for calculation of refraction...
+Elevation [degrees] including refraction (pt-profile): 63.090467
+Air Mass relative to zenith air mass: 1.121121

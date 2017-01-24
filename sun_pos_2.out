@@ -1,0 +1,18 @@
+0
+63.0829
+63.0905
+60.0925
+2016
+6
+24
+1.12112
+The above lines are
+
+- Error Occured (1) or no error (0)
+- Unrefracted Elevation in Degrees
+- Refracted Elevation in Degrees
+- Azimuth in Degreees (Where south is 0 and West is 90)
+- Year
+- Month
+- Day
+- Air Mass relative to zenith air mass
