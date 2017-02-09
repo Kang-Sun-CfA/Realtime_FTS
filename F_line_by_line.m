@@ -397,7 +397,5 @@ for m = 1:numberOfMolecules
             M_list(countm).isotopologues(n).molarmass = isoData{5}(n)/1000;
         end
         countm = countm+1;
-    end
-    
+    end    
 end
-
