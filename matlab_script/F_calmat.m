@@ -65,6 +65,12 @@ else
     lowerlim = config.lowerlim;upperlim = config.upperlim;
 end
 
+if ~isfield(config,'display')
+    ifdisplay = false;
+else
+    ifdisplay = config.display;
+end
+
 phasres = 0;   % choose the smallest possible phase resolution
 ssords = 1;    % double-sided ifg
 timingtype = 0;% if 0, timing at the start of the scan; if 1, at the end
@@ -111,7 +117,7 @@ else
         disp(['Skipping interferogram: ',filename])
         return
     end
-    disp('-> plausibility check passed!')
+    if ifdisplay;disp('-> plausibility check passed!');end
     
     % DC correction:
     % find the smoothed DC baseline
@@ -180,7 +186,9 @@ else
         % Max-Position is not symmetric -> bad IFG
         ifgQuality = - 2;
     end
+    if ifdisplay
     disp(['-> calculation of IFG-quality parameter: ',num2str(ifgQuality)])
+    end
     calmat.ifgQuality = ifgQuality;
     
     % perform DC correction
@@ -255,7 +263,7 @@ end
 calmat.tutc = tutc;
 calmat.tloc = tloc;
 if ~isfield(config,'refraction')
-    disp('Tell me you want refraction or not!')
+    if ifdisplay;disp('Tell me you want refraction or not!');end
     return % done
 end
 if ~isfield(config,'pathpt')
@@ -279,6 +287,7 @@ end
 
 function [error, elev_unref, elev_ref, azim, am] = ...
     F_sun_position(dtv,pos,refraction,pathpt,sunormoon)
+cd ../programs
 fid = fopen('sun_pos_2.inp', 'w');
 fprintf(fid,'%s',sprintf(['Input-File for Sun_Pos_2.exe\n', '\n', ...
     'Note: The Earth-Orientation parameter file can be downloaded here:',...
@@ -332,6 +341,7 @@ else
     am = str2double(fgets(fid));
     fclose(fid);
 end
+cd ../matlab_script/
 
 function [specrepc, phasre, phasim,nmax] = ...
     F_fftmain(ifgacfwd,nuesampling,nburstfwd,apokind,ssords,nss,nradius,phasres)

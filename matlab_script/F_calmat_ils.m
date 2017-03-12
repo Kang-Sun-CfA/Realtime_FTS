@@ -28,7 +28,7 @@ if isfield(input,'filename')
         disp(['Skipping interferogram: ',filename])
         return
     end
-    disp('-> plausibility check passed!')
+%     disp('-> plausibility check passed!')
     
     % DC correction:
     % find the smoothed DC baseline
@@ -97,7 +97,7 @@ if isfield(input,'filename')
         % Max-Position is not symmetric -> bad IFG
         ifgQuality = - 2;
     end
-    disp(['-> calculation of IFG-quality parameter: ',num2str(ifgQuality)])
+%     disp(['-> calculation of IFG-quality parameter: ',num2str(ifgQuality)])
     output.ifgQuality = ifgQuality;
     
     % perform DC correction
