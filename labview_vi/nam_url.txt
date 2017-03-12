@@ -1,0 +1,5 @@
+ftp://ftpprd.ncep.noaa.gov/pub/data/nccf/com/nam/prod/ndas.20160725/
+
+http://www.nco.ncep.noaa.gov/pmb/products/nam/#NAM
+
+ftp://ftp.ncep.noaa.gov/pub/data/nccf/com/nam/prod/nam.20160726/
