@@ -50,6 +50,7 @@ last_fileN = -1;
 spec_path = 'C:\Users\ksun\Documents\GitHub\Realtime_FTS\spectra\160624';
 do_fit = false;
 %% FIND THE CORRECT FILENAME
+if last_fileN < 0 || (last_fileN >= 0 && fileN <= last_fileN)
 temp = textscan(date_obs,'%s%s%s','delimiter',',');
 
 obs_year = temp{1}{1};
@@ -101,4 +102,5 @@ for iwin = 1:length(window_list)
     if ~do_fit;R = nan*s2;coeff = nan;end;
     Results{iwin,1} = coeff;
     Results{iwin,2} = [w2,s2,R]';
+end
 end
