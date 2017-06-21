@@ -160,10 +160,8 @@ if last_fileN < 0 || (last_fileN >= 0 && fileN <= last_fileN)
         input_nlinfit.ils = ilsy;
         optional_fields = {'shift_gas','shift_sun','shift_together','scaling','tilt','zlo'};
         optional_fields_ap = [0,           0,          0,               1,       0,     0];
-        % the following index combined should cover
-        % 1:length(optional_fields)
-        input_fields_index = [1 3];% index as input
-        fit_fields_index = [2 4 5 6];% index included in fitting
+        input_fields_index = [1 3];
+        fit_fields_index = [2 4 5 6];
         input_fields = optional_fields(input_fields_index);
         input_value = optional_fields_ap(input_fields_index);
         for i = 1:length(input_value)
@@ -173,7 +171,7 @@ if last_fileN < 0 || (last_fileN >= 0 && fileN <= last_fileN)
             ss = cell(length(window_list),1);
         end
     end
-    for iwin = 1:length(window_list)
+    for iwin = 1%1:length(window_list)
         target_gas = window_list(iwin).target_gas;
         windowID = window_list(iwin).windowID;
         common_grid = window_list(iwin).common_grid;
@@ -226,9 +224,7 @@ if last_fileN < 0 || (last_fileN >= 0 && fileN <= last_fileN)
 %             % input_nlinfit.zlo = 0;
             coeff0 = [optional_fields_ap(fit_fields_index) ones(1,n_fit_spec)*AMF];
             [coeff, R] = nlinfit(input_nlinfit,s2,@F_forward,coeff0);
-%             figure
-%             plot(w2,s2,'k',w2,F_forward(coeff0,input_nlinfit),w2,F_forward(coeff,input_nlinfit))
-
+            
         end
         Results{iwin,1} = coeff;
         Results{iwin,2} = [w2,s2,R]';

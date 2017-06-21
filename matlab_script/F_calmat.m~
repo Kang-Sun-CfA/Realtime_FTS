@@ -11,8 +11,6 @@ function calmat = F_calmat(filename,config)
 % The matlab OPUS reading routine is kindly provided by Jacob Filik
 % Written by Kang Sun on 2017/01/04
 
-% Updated by Kang Sun on 2017/06/21 to replace the old, accurate, but often
-% useless solar position function with a quick easy one.
 if ~isfield(config,'apokind')
     apokind = 7;
 else
@@ -71,12 +69,6 @@ if ~isfield(config,'display')
     ifdisplay = false;
 else
     ifdisplay = config.display;
-end
-
-if ~isfield(config,'ifamf')
-    ifamf = false;
-else
-    ifamf = config.ifamf;
 end
 
 phasres = 0;   % choose the smallest possible phase resolution
@@ -271,18 +263,16 @@ end
 calmat.tutc = tutc;
 calmat.tloc = tloc;
 
-if ifamf
 UTC = datestr(tutc,'yyyy/mm/dd HH:MM:SS');
 try
-    [azim, elev_unref] = SolarAzEl(UTC,loclat,loclon, localt);
-    am = 1./cos(elev_unref/90*pi/2);
-    calmat.elev_unref = elev_unref;
+[azim, elev_unref] = SolarAzEl(UTC,loclat,loclon, localt);
+am = cos(elev_unref/90*pi/2);
+calmat.elev_unref = elev_unref;
     calmat.azim = azim;
     calmat.am = am;
 catch
     warning('An error occurred while calculating AMF!')
 end
-
 % if ~isfield(config,'refraction')
 %     if ifdisplay;disp('Tell me you want refraction or not!');end
 %     return % done
@@ -305,7 +295,6 @@ end
 %     calmat.azim = azim;
 %     calmat.am = am;
 % end
-end
 end
 function [Az,El] = SolarAzEl(UTC,Lat,Lon,Alt)
 %% Revision History:
