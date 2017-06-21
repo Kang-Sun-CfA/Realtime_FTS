@@ -270,12 +270,12 @@ elseif timingtype == 1
 end
 calmat.tutc = tutc;
 calmat.tloc = tloc;
-
+calmat.scanT = paramas.Instrument.TSC;% scan temperature
 if ifamf
 UTC = datestr(tutc,'yyyy/mm/dd HH:MM:SS');
 try
     [azim, elev_unref] = SolarAzEl(UTC,loclat,loclon, localt);
-    am = 1./cos(elev_unref/90*pi/2);
+    am = 1./sin(elev_unref/90*pi/2);
     calmat.elev_unref = elev_unref;
     calmat.azim = azim;
     calmat.am = am;

@@ -1,12 +1,13 @@
 % system separator, "/" for mac and linux, "\" for windows
 sfs = filesep;
 %% INPUT FROM LABVIEW WRAPPER USED FOR TESTING, SHOULD BE COMMENTED OUT
-date_obs = '2016,06,24';
-observation = 'hb';
-fileN = 1138;
-last_fileN = -1;
-spec_path = ['..',sfs,'spectra',sfs,'160624'];
-do_fit = true;
+% date_obs = '2016,06,24';
+% observation = 'hb';
+% fileN = 1856;
+% last_fileN = -1;
+% spec_path = ['..',sfs,'spectra',sfs,'160624'];
+% do_fit = true;
+
 ifamf = true;
 which_CIA = 'GFIT';% GFIT, SAO, or Mate
 %% IMPORTANT INPUTS
@@ -65,7 +66,7 @@ maxquerytime = 5;
 %          3: Happ-Genzel
 %        4/5: Blackmann-Harris 3-term/4-term
 %      6/7/8: Norton-Beer weak/medium/strong
-apokind_all = 7;
+% apokind_all = 7;
 
 % rate of downsample. you don't need smoothed ifg at original rate
 ifgs_step = 500;
@@ -147,10 +148,13 @@ if last_fileN < 0 || (last_fileN >= 0 && fileN <= last_fileN)
     %% PICK OUT SEVERAL KEY OUTPUT VARIABLES
     ifgQuality = calmat.ifgQuality;
     percentDeviation = calmat.percentDeviation;
-    ZPDRight = calmat.ZPDRight;
-    ZPDLeft = calmat.ZPDLeft;
-    ifg_smooth = calmat.ifg_smooth(1:ifgs_step:end);
+    ZPDRight = calmat.ZPDRight';
+    ZPDLeft = calmat.ZPDLeft';
+    ifg_smooth = calmat.ifg_smooth(1:ifgs_step:end)';
     AMF = calmat.am;
+    nburstfwd = calmat.nburstfwd;
+    nburstbwd = calmat.nburstbwd;
+    scanT = calmat.scanT;
     %% SEPARATE INTO FITTING WINDOWS AND OPTIONALLY DO FITTING
     Results = cell(length(window_list),2);
     % prepare data base if do fitting
