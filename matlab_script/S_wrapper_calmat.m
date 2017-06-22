@@ -70,8 +70,16 @@ maxquerytime = 5;
 
 % rate of downsample. you don't need smoothed ifg at original rate
 ifgs_step = 500;
+%% DECIDE IF NEED UPDATE ILS
+do_update_ils = false;
+if exist('apokind_all0','var')
+    if apokind_all ~= apokind_all0 % need update apodization choice
+        do_update_ils = true;
+    end
+end
+apokind_all0 = apokind_all;
 %% WORK OUT AN ILS, if necessary
-if ~exist('ilsy','var')
+if ~exist('ilsy','var') || do_update_ils
     % Half length of the ILS, the longer the more accurate and slower
     ilsextent = 10; % wavenumber
     % find an OPUS file with the same ILS as the measurements
@@ -80,7 +88,7 @@ if ~exist('ilsy','var')
     input_ils.filename = ils_fn;
     input_ils.sim_wn = 1.579792480468750e+04/2;
     input_ils.phase_error = 0*5.412e-1;
-    input_ils.apokind = apokind_all; % should be consistent with apokind in config
+    input_ils.apokind = apokind_all0; % should be consistent with apokind in config
     input_ils.zerofillingfactor = 6;
     output_ils = F_calmat_ils(input_ils);
     nmax = output_ils.nmax;
@@ -96,7 +104,7 @@ end
 % initialize the input
 config = [];
 
-config.apokind = apokind_all;
+config.apokind = apokind_all0;
 
 % lower and upper limit of output spectrum, in cm-1
 config.lowerlim = 5000;
@@ -155,10 +163,13 @@ if last_fileN < 0 || (last_fileN >= 0 && fileN <= last_fileN)
     nburstfwd = calmat.nburstfwd;
     nburstbwd = calmat.nburstbwd;
     scanT = calmat.scanT;
+    %% CHECK IFG QUALITY
+    if_worth_fitting = ifgQuality < 0.2 & abs(percentDeviation) < 10 & ...
+        min(ZPDRight) < -0.01 & min(ZPDLeft) < -0.01;
     %% SEPARATE INTO FITTING WINDOWS AND OPTIONALLY DO FITTING
     Results = cell(length(window_list),2);
     % prepare data base if do fitting
-    if do_fit
+    if do_fit && if_worth_fitting
         load(['..',sfs,'spectroscopy',sfs,'FTS_solar.mat'],'llwaven','lltranswaven')
         input_nlinfit = [];
         input_nlinfit.ils = ilsy;
@@ -187,23 +198,23 @@ if last_fileN < 0 || (last_fileN >= 0 && fileN <= last_fileN)
         
         wStart = window_list(iwin).wRange(1);
         wEnd = window_list(iwin).wRange(2);
-
+        
         interval = calmat.x >= wStart & calmat.x <= wEnd;
         
         w2 = calmat.x(interval);
         s2 = double(calmat.spec(interval));
         w2 = w2(:);s2 = s2(:)/max(s2);
-        if ~do_fit
-            R = nan*s2;coeff = nan;
+        if ~do_fit || ~if_worth_fitting
+            R = nan*s2;coeff = nan(10,1);
         else
             if isempty(ss{iwin})
-            int = llwaven >= vStart & llwaven <= vEnd;
-            llwave = llwaven(int);lltrans = lltranswaven(int);
-            ss{iwin} = F_conv_interp(llwave,lltrans,...
-                2.5*common_grid_resolution,common_grid);
+                int = llwaven >= vStart & llwaven <= vEnd;
+                llwave = llwaven(int);lltrans = lltranswaven(int);
+                ss{iwin} = F_conv_interp(llwave,lltrans,...
+                    2.5*common_grid_resolution,common_grid);
             end
             input_nlinfit.ss = ss{iwin};
-                
+            
             % this is very similar to mol_for_fit, except O2 CIA
             fit_spec_names = fieldnames(window_list(iwin).tau_struct);
             n_fit_spec = length(fit_spec_names);
@@ -222,17 +233,16 @@ if last_fileN < 0 || (last_fileN >= 0 && fileN <= last_fileN)
             input_nlinfit.w2 = w2;
             input_nlinfit.w1 = common_grid;
             
-%             input_nlinfit.shift_gas = 0;
-%             % input_nlinfit.shift_sun = 0;
-%             input_nlinfit.shift_together = 0;
-%             % input_nlinfit.scaling = 1;
-%             % input_nlinfit.tilt = 0;
-%             % input_nlinfit.zlo = 0;
+            %             input_nlinfit.shift_gas = 0;
+            %             % input_nlinfit.shift_sun = 0;
+            %             input_nlinfit.shift_together = 0;
+            %             % input_nlinfit.scaling = 1;
+            %             % input_nlinfit.tilt = 0;
+            %             % input_nlinfit.zlo = 0;
             coeff0 = [optional_fields_ap(fit_fields_index) ones(1,n_fit_spec)*AMF];
             [coeff, R] = nlinfit(input_nlinfit,s2,@F_forward,coeff0);
-%             figure
-%             plot(w2,s2,'k',w2,F_forward(coeff0,input_nlinfit),w2,F_forward(coeff,input_nlinfit))
-
+            %             figure
+            %             plot(w2,s2,'k',w2,F_forward(coeff0,input_nlinfit),w2,F_forward(coeff,input_nlinfit))
         end
         Results{iwin,1} = coeff;
         Results{iwin,2} = [w2,s2,R]';
