@@ -12,6 +12,7 @@ function window_list = F_absco2tau(inp)
 % table instead of line-by-line voigt profile calculation.
 
 % written by Kang Sun on 2017/06/20
+% updated by Kang Sun on 2017/06/25 to add adjustable surface layer
 
 % % inputs for testing
 % clc;clear
@@ -176,10 +177,11 @@ for iwin = 1:length(window_list)
         tmp_struct.(mol_for_fit{imol}).surface_layer_sigma = ...
             F_conv_interp(inp_interp.Wq,...
             F_interp_absco(inp_interp),dgrd_fwhm,common_grid);
-        
+        % sfc layer pressure in hPa
         tmp_struct.(mol_for_fit{imol}).surface_layer_top_P = ...
             inp.lowest_possible_Psurf;
-        
+        % sfc layer VMR
+        tmp_struct.(mol_for_fit{imol}).surface_layer_VMR = C(end,prof_index);
     end
     window_list(iwin).tau_struct = tmp_struct;
     

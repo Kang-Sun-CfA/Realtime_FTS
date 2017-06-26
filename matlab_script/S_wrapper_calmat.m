@@ -7,6 +7,7 @@ fileN = 1856;
 last_fileN = -1;
 spec_path = ['..',sfs,'spectra',sfs,'160624'];
 do_fit = true;
+apokind_all = 7;
 %%
 ifamf = true;
 which_CIA = 'GFIT';% GFIT, SAO, or Mate
@@ -226,8 +227,12 @@ if last_fileN < 0 || (last_fileN >= 0 && fileN <= last_fileN)
             n_fit_spec = length(fit_spec_names);
             input_nlinfit.s1 = nan(n_fit_spec,length(common_grid));
             for i_fit_spec = 1:n_fit_spec
-                input_nlinfit.s1(i_fit_spec,:) = ...
-                    double(window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).Tau_sum);
+                tmp_tau_prof = window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).Tau_sum;
+                tmp_tau_sfc = window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_sigma/1e4... % absorption cross section in m2
+                    *(P_surface-window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_top_P)*100 ... % surface layer thickness in Pa
+                /(0.029/6.02e23*9.8) ... % air molecular weight and g
+                *window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_VMR; 
+                input_nlinfit.s1(i_fit_spec,:) = double(tmp_tau_prof+tmp_tau_sfc);
             end
             % add O2 CIA for the O2 fitting window
             if iwin == 1
