@@ -3,7 +3,8 @@ function window_list = F_absco2tau(inp)
 % the vertical profiles are available (e.g., from weather forecast)
 
 % inputs: location of absco tables; vertical profiles saved in a correct
-% format; common resolution
+% format; common resolution (sampling interval really; the FWHM is 2.5 x
+% common resolution)
 
 % outputs: database for each species in each fitting window
 
@@ -22,18 +23,23 @@ function window_list = F_absco2tau(inp)
 % inp.common_grid_resolution = 0.01;
 % inp.surface_layer_P = 990;
 
+% pressure of lowest level, below which is the adjustable surface layer
 if ~isfield(inp,'lowest_possible_Psurf')
     inp.lowest_possible_Psurf = 980;
 end
 
+% representative pressure of the surface layer, should be close to the mean
+% of inp.lowest_possible_Psurf and measured instantaneous surface pressure
 if ~isfield(inp,'surface_layer_P')
     inp.surface_layer_P = 990;
 end
 
+% wavenumber interval to define the output
 if ~isfield(inp,'common_grid_resolution')
     inp.common_grid_resolution = 0.05;
 end
 
+% how many sublayer to divide each layer into? OCO-2 used 10
 if ~isfield(inp,'nsublayer')
     inp.nsublayer = 3;
 end
@@ -162,13 +168,18 @@ for iwin = 1:length(window_list)
             Tau_layer(ilevel,:) = ...
                 F_conv_interp(inp_interp.Wq,dTau_layer,dgrd_fwhm,common_grid);
         end
+        tmp_struct.(mol_for_fit{imol}).Tau_sum = sum(Tau_layer);
+        
         % calculate the absorption cross-section at the sfc layer
         inp_interp.Tq = mean([C(end,3) C_0(end,3)]);
         inp_interp.Pq = inp.surface_layer_P;
         tmp_struct.(mol_for_fit{imol}).surface_layer_sigma = ...
             F_conv_interp(inp_interp.Wq,...
             F_interp_absco(inp_interp),dgrd_fwhm,common_grid);
-        tmp_struct.(mol_for_fit{imol}).Tau_sum = sum(Tau_layer);
+        
+        tmp_struct.(mol_for_fit{imol}).surface_layer_top_P = ...
+            inp.lowest_possible_Psurf;
+        
     end
     window_list(iwin).tau_struct = tmp_struct;
     

@@ -1,13 +1,13 @@
 % system separator, "/" for mac and linux, "\" for windows
 sfs = filesep;
 %% INPUT FROM LABVIEW WRAPPER USED FOR TESTING, SHOULD BE COMMENTED OUT
-% date_obs = '2016,06,24';
-% observation = 'hb';
-% fileN = 1856;
-% last_fileN = -1;
-% spec_path = ['..',sfs,'spectra',sfs,'160624'];
-% do_fit = true;
-
+date_obs = '2016,06,24';
+observation = 'hb';
+fileN = 1856;
+last_fileN = -1;
+spec_path = ['..',sfs,'spectra',sfs,'160624'];
+do_fit = true;
+%%
 ifamf = true;
 which_CIA = 'GFIT';% GFIT, SAO, or Mate
 %% IMPORTANT INPUTS
@@ -16,9 +16,14 @@ update_profile = false;
 if ~exist('do_fit','var')
     do_fit = true;
 end
+
+if ~exist('P_surface','var')
+    P_surface = 1013.25;
+end
+
 % Load fitting window information and pre-calculated optical depth
-profile_date = '0000';% mmdd, 0000 for US standard atm
-profile_hour = '0000';% hhmm, 0000 for US standard atm
+profile_date = '0000';% mmdd, 0000 for US standard atmosphere
+profile_hour = '0000';% hhmm, 0000 for US standard atmosphere
 window_list_fn = ['..',sfs,'spectroscopy',sfs,'window_list_',...
     profile_date,'_',profile_hour,'.mat'];
 
@@ -118,6 +123,7 @@ if do_fit
     config.ifamf = true;
 end
 
+% coordinate and altitude (km) of measurement location
 config.loclat = 39.767;
 config.loclon = -86.15;
 config.localt = 0.22;
