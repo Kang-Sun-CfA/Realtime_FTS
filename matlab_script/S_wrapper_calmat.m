@@ -1,13 +1,13 @@
 % system separator, "/" for mac and linux, "\" for windows
 sfs = filesep;
 %% INPUT FROM LABVIEW WRAPPER USED FOR TESTING, SHOULD BE COMMENTED OUT
-date_obs = '2016,06,24';
-observation = 'hb';
-fileN = 1856;
-last_fileN = -1;
-spec_path = ['..',sfs,'spectra',sfs,'160624'];
-do_fit = true;
-apokind_all = 7;
+% date_obs = '2016,06,24';
+% observation = 'hb';
+% fileN = 1856;
+% last_fileN = -1;
+% spec_path = ['..',sfs,'spectra',sfs,'160624'];
+% do_fit = true;
+% apokind_all = 7;
 %%
 ifamf = true;
 which_CIA = 'GFIT';% GFIT, SAO, or Mate
