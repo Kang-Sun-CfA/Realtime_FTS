@@ -5,26 +5,19 @@ datadir = '/data/tempo1/Shared/kangsun/FTS_data/';
 % HITRAN molecule parameter file
 molparampath = '/home/kangsun/Courses/molparam.txt';
 
-% fid = fopen([datadir,'av0.table']);
-% C = cell2mat(textscan(fid,'%f%f%f%f','headerlines',1,'delimiter',' ',...
-%     'multipledelimsasone',1));
-% plot(C(:,1),C(:,2:4))
-% %%
-% vlow = C(:,1);
-% [xgrid,ygrid] = meshgrid(vlow,[298 273 253]);
-% h = surf(xgrid,ygrid,C(:,2:4)');set(h,'edgecolor','none')
-% %%
-% clc
-% temp = 280;
-% acia_low = interp2(xgrid,ygrid,C(:,2:4)',vlow,temp);
-% plot(C(:,1),C(:,2:4),vlow,acia_low,'k')
 %%%%%% Define resolution of common grid, in cm-1. Optical depth and solar
 %%%%%% spectrum will be interpolated to this common grid
-common_grid_resolution = 0.01;
+common_grid_resolution = 0.005;
 
 common_grid = 9100:common_grid_resolution:9700;
 vStart = min(common_grid);
 vEnd = max(common_grid);
+
+%% load profile
+fn_prof = 'D:\Research_CfA\FTS\20160624\hb20160624.map';
+fid = fopen(fn_prof);
+C = cell2mat(textscan(fid,repmat('%f',[1,12]),'headerlines',11,'delimiter',',','multipledelimsasone',1));
+%%
 
 % load a high profile
 fid = fopen('/data/tempo2/ggonzale/GEOCAPE-TOOL/geocape_data/TES_Data/AtmProfiles_Data_Run551C_Seq0028_Scan002.asc');

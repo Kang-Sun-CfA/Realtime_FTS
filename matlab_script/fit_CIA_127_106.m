@@ -1,28 +1,24 @@
-function window_list = F_absco2tau(inp)
-% function used to generating spectroscopic fitting database offline, after
-% the vertical profiles are available (e.g., from weather forecast)
+% overhaul the fit CIA code to use absco tables
+% updated by Kang Sun from fit_CIA_106.m and F_absco2tau.m on 2017/10/07
 
-% inputs: location of absco tables; vertical profiles saved in a correct
-% format; common resolution (sampling interval actually; the FWHM is 2.5 x
-% common resolution)
+clear;clc;close all
+% system separator, "/" for mac and linux, "\" for windows
+sfs = filesep;
+inp = [];
 
-% outputs: database for each species in each fitting window
+%!!!!!!!!!!!!!!!! local dir saving ABSCO tables !!!!!!!!!!!!!!!!!!!!!!
+inp.absco_dir = '/data/tempo1/Shared/kangsun/FTS_data/HITRAN/';
+%!!!!!!!!!!!!!!!! YOU HAVE TO SPECIFY THIS !!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-% It has similar functionality to F_line_by_line.m, but interpolating ABSCO
-% table instead of line-by-line voigt profile calculation.
+inp.CIA_dir = ['..',sfs,'spectroscopy',sfs];
+inp.which_CIA = {'sao','gfit','mate'};
+inp.profile_fn = 'D:\Research_CfA\FTS\20160624\hb20160624.map';
+inp.lowest_possible_Psurf = 980;
+inp.nsublayer = 1;
+inp.common_grid_resolution = 0.05;
+inp.surface_layer_P = 990;
 
-% written by Kang Sun on 2017/06/20
-% updated by Kang Sun on 2017/06/25 to add adjustable surface layer
-
-% % inputs for testing
-% clc;clear
-% inp = [];
-% inp.absco_dir = '/data/tempo1/Shared/kangsun/FTS_data/HITRAN/';
-% inp.profile_fn = '~/FTS/toolbox/profiles_0000_0000.dat';
-% inp.lowest_possible_Psurf = 980;
-% inp.nsublayer = 3;
-% inp.common_grid_resolution = 0.01;
-% inp.surface_layer_P = 990;
+% end of input
 
 % pressure of lowest level, below which is the adjustable surface layer
 if ~isfield(inp,'lowest_possible_Psurf')
@@ -50,10 +46,21 @@ varname = {'place_holder','Pressure','Temperature','Wavenumber'};
 kB = 1.38064852e-23;
 
 dgrd_fwhm = 2.5*inp.common_grid_resolution;
-%%
+
+%% load profile
 fid = fopen(inp.profile_fn);
-C_0 = cell2mat(textscan(fid,'%f%f%f%f%f%f%f','delimiter',' ','multipledelimsasone',1,'headerlines',11));
-fclose(fid);
+C_0 = cell2mat(textscan(fid,repmat('%f',[1,12]),'headerlines',11,'delimiter',',','multipledelimsasone',1));
+% I insist that the first column should be pressure and the second column
+% be altitude. The third one better to be temperature. 
+C0 = C_0;
+C0(:,[1 2 3 4 5 6]) = C_0(:,[3 1 2 5 7 10]);
+% I don't like definition of co2 and ch4. Change them to vmr
+C0(:,5) = C0(:,5)*1e-6;
+C0(:,6) = C0(:,6)*1e-9;
+% add O2 mixing ratio
+C0(:,7) = ones(size(C0,1),1)*0.2095;
+C0 = C0(:,1:7);
+C_0 = C0;
 
 % convert presgrid from Pa (or atm) to hPa if necessary
 if max(C_0(:,1)) > 7.7e4 % I guess a good pressure profile extends below 770 hPa
@@ -78,16 +85,163 @@ C = cat(1,C_0(C_0(:,1)-inp.lowest_possible_Psurf < 0,:),C_low);
 nsublayer = inp.nsublayer;
 nlevel = size(C,1);
 nlayer = nlevel-1;
+%% make some plots
+if ispc
+load('C:\Users\Kang Sun\Documents\GitHub\Realtime_FTS\spectroscopy\ptgrid.mat')
+load('C:\Users\Kang Sun\Documents\GitHub\Realtime_FTS\spectroscopy\abscoptgrid.mat')
 
-%%%%%% Define retrieval windows
+fid = fopen('D:\Research_CfA\FTS\20170217\hb20170217.map');
+C_0 = cell2mat(textscan(fid,repmat('%f',[1,12]),'headerlines',11,'delimiter',',','multipledelimsasone',1));
+% I insist that the first column should be pressure and the second column
+% be altitude. The third one better to be temperature. 
+C0 = C_0;
+C0(:,[1 2 3 4 5 6]) = C_0(:,[3 1 2 5 7 10]);
+% I don't like definition of co2 and ch4. Change them to vmr
+C0(:,5) = C0(:,5)*1e-6;
+C0(:,6) = C0(:,6)*1e-9;
+% add O2 mixing ratio
+C0(:,7) = ones(size(C0,1),1)*0.2095;
+C0 = C0(:,1:7);
+C_0 = C0;
+
+% convert presgrid from Pa (or atm) to hPa if necessary
+if max(C_0(:,1)) > 7.7e4 % I guess a good pressure profile extends below 770 hPa
+    C_0(:,1) = C_0(:,1)/100;
+end
+if max(C_0(:,1)) < 2
+    C_0(:,1) = C_0(:,1)*1.01325e3;
+end
+
+% make sure from low to high pressure, VERY IMPORTANT
+[~,I] = sort(C_0(:,1));C_0 = C_0(I,:);
+
+% trim the lowest part of profiles
+C_low = nan(1,size(C_0,2));
+C_low(1) = inp.lowest_possible_Psurf;
+for i = 2:size(C_0,2)
+    C_low(i) = interp1(C_0(:,1),C_0(:,i),inp.lowest_possible_Psurf);
+end
+
+C_0217 = cat(1,C_0(C_0(:,1)-inp.lowest_possible_Psurf < 0,:),C_low);
+
+close all
+set(0,'defaultaxesfontsize',12)
+figure('unit','inch','color','w','position',[15 1 14 6])
+subplot(1,2,1)
+semilogy(tempgrid_absco,presgrid_absco,'.k','markersize',12);axis ij
+hold on
+hw = plot(C_0217(:,3),C_0217(:,1)*100,'b','linewidth',3);
+hs = plot(C(:,3),C(:,1)*100,'r','linewidth',3);
+hold off
+set(gca,'xlim',[150 350],'ylim',[1 1.2e5],'linewidth',1,'box','off')
+ylabel('Pressure [Pa]')
+xlabel('Temperature [K]')
+hleg = legend([hw hs],'Winter (Feb 17, 2017)','Summer (Jun 24, 2016)');
+set(hleg,'box','off')
+title('OCO-2 ABSCO P/T grid','fontsize',16)
+
+subplot(1,2,2)
+semilogy(tempgrid,presgrid,'.k','markersize',12);axis ij
+hold on
+hw = plot(C_0217(:,3),C_0217(:,1)*100,'b','linewidth',3);
+hs = plot(C(:,3),C(:,1)*100,'r','linewidth',3);
+hold off
+set(gca,'xlim',[150 350],'ylim',[1 1.2e5],'linewidth',1,'box','off')
+xlabel('Temperature [K]')
+title('Modified P/T grid','fontsize',16)
+%%
+close all
+set(0,'defaultaxesfontsize',12)
+ivar = 3;
+switch ivar
+    case 2
+Xlim = [-0.3 2.1];
+offset = 0.1;
+    case 3
+        Xlim = [270 310];
+        offset = 1.5;
+end
+Ylim = [780 1050];
+figure('unit','inch','color','w','position',[-15 1 12 6])
+subplot(1,3,1)
+hold on
+plot(C_0(:,ivar),C_0(:,1),'-O','linewidth',2);axis ij
+count = 0;
+for i = size(C_0,1):-1:size(C_0,1)-3
+    plot([Xlim(1) C_0(i,ivar)],[C_0(i,1),C_0(i,1)],':k')
+    text(C_0(i,ivar)+offset,C_0(i,1),['Level ',num2str(count)],...
+        'horizontalalignment','left','fontsize',16);
+    count = count+1;
+end
+plot(C_low(ivar),C_low(1),'rp','linewidth',2,'markersize',16)
+text(C_low(ivar)+offset,C_low(1)+0.,['Lowest possible',char(10), 'surface pressure'],...
+        'horizontalalignment','left','fontsize',14);
+
+hold off
+ylim(Ylim)
+xlim(Xlim)
+title('A priori profiles','fontsize',16)
+set(gca,'linewidth',1)
+ylabel('Pressure [hPa]')
+subplot(1,3,2)
+hold on
+plot(C(:,ivar),C(:,1),'-O','linewidth',2);axis ij
+count = 0;
+for i = size(C,1):-1:size(C,1)-3
+    plot([Xlim(1) C(i,ivar)],[C(i,1),C(i,1)],':k')
+    text(C(i,ivar)+offset,C(i,1),['Level ',num2str(count)],...
+        'horizontalalignment','left','fontsize',16);
+    count = count+1;
+end
+plot(C_low(ivar),C_low(1),'rp','linewidth',2,'markersize',16)
+text(C_low(ivar)-offset,C_low(1)+0.,['Lowest possible',char(10), 'surface pressure'],...
+        'horizontalalignment','right','fontsize',14);
+
+hold off
+ylim(Ylim)
+xlim(Xlim)
+title('Truncated profiles','fontsize',16)
+set(gca,'linewidth',1,'ycolor','w','ytick',[])
+xlabel('Temperature [km], but can be VMRs')
+% ylabel('Relative altitude [km]')
+
+subplot(1,3,3)
+hold on
+hold on
+plot(C(:,ivar),C(:,1),'-O','linewidth',2);axis ij
+count = 0;
+for i = size(C,1):-1:size(C,1)-3
+    plot([Xlim(1) C(i,ivar)],[C(i,1),C(i,1)],':k')
+    text(C(i,ivar)+offset,C(i,1),['Level ',num2str(count)],...
+        'horizontalalignment','left','fontsize',16);
+    count = count+1;
+end
+
+P_surface = 999;
+plot(C(end,ivar),P_surface,'k^','linewidth',2,'markersize',10);
+
+text(C(end,ivar)+offset,P_surface+10,['Real-time',char(10),'surface pressure'],...
+        'horizontalalignment','left','fontsize',14);
+    plot([Xlim(1) C(end,ivar)],[P_surface,P_surface],':k')
+ha = area([Xlim(1) C(end,ivar)],[C(end,1),C(end,1);P_surface-C(end,1),P_surface-C(end,1)]');
+set(ha(1),'facecolor','none','edgecolor','none')
+set(ha(2),'facecolor','c','edgecolor','none')
+uistack(ha,'bottom')
+hold off
+ylim(Ylim)
+xlim(Xlim)
+title('Truncated profiles+adjustable surface layer','fontsize',16)
+set(gca,'linewidth',1,'ycolor','w','ytick',[])
+end
+%% %%%% Define retrieval windows
 field1 = 'target_gas';
 field2 = 'windowID';
 field3 = 'common_grid';
 field4 = 'tau_struct';
 field5 = 'vRange';
 field6 = 'wRange';
-value1 = {'O2','CO2','CO2','CH4','CH4'};
-value2 = {1,1,2,1,2};
+value1 = {'O2','O2'};
+value2 = {0,1};
 window_list = struct(field1,value1,field2,value2,field3,[],field4,[],...
     field5,[],field6,[]);
 
@@ -314,6 +468,3 @@ for iwin = 1:length(window_list)
     end
     disp(['Finished ',target_gas,' window ',num2str(windowID),' at ',datestr(now)])
 end
-%%
-% iwin = 2;
-% plot(window_list(iwin).common_grid,window_list(iwin).tau_struct.CH4.surface_layer_sigma)
