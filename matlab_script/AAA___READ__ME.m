@@ -61,6 +61,27 @@ for fileN = 1138;
     subplot(4,2,8)
     plot(w2,s2);xlim([6007 6145])
 end
+%%
+[ifg,~,paramas] = ImportOpus(filename,'SampleInterferogram');
+close all
+figure('unit','inch','color','w','position',[-15 0 11 3.5])
+subplot(1,2,1)
+plot(1:length(calmat.ifgC),ifg,'k')
+tmp = 0.003;
+ylim([mean(calmat.ifg_smooth)-tmp,mean(calmat.ifg_smooth)+tmp])
+set(gca,'linewidth',1,'xlim',[1,length(calmat.ifgC)])
+xlabel('Number of samples')
+ylabel('Signal intensity')
+box off
+title('Interferogram before correction','fontsize',14)
+subplot(1,2,2)
+plot(1:length(calmat.ifgC),calmat.ifgC,'k')
+ylim([-tmp,+tmp])
+set(gca,'linewidth',1,'xlim',[1,length(calmat.ifgC)],'ycolor','k')
+box off
+xlabel('Number of samples')
+title('Interferogram after correction','fontsize',14)
+
 %% plot ILS
 % The function F_calmat_ils is essentially the same as F_calmat. The idea
 % is that if you feed F_calmat with an ifg, it will give you a spectrum; if you
