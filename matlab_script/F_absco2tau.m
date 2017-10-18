@@ -13,6 +13,8 @@ function window_list = F_absco2tau(inp)
 
 % written by Kang Sun on 2017/06/20
 % updated by Kang Sun on 2017/06/25 to add adjustable surface layer
+% updated by Kang Sun on 2017/10/18 to add HITRAN CIA and make it
+% compatible for GFIT .map profiles
 
 % % inputs for testing
 % clc;clear
@@ -51,9 +53,27 @@ kB = 1.38064852e-23;
 
 dgrd_fwhm = 2.5*inp.common_grid_resolution;
 %%
-fid = fopen(inp.profile_fn);
-C_0 = cell2mat(textscan(fid,'%f%f%f%f%f%f%f','delimiter',' ','multipledelimsasone',1,'headerlines',11));
-fclose(fid);
+if strcmpi(inp.profile_fn(end-3:end),'.dat')
+    fid = fopen(inp.profile_fn);
+    C_0 = cell2mat(textscan(fid,'%f%f%f%f%f%f%f','delimiter',' ','multipledelimsasone',1,'headerlines',11));
+    fclose(fid);
+% trim the .map profile file
+elseif strcmpi(inp.profile_fn(end-3:end),'.map')
+    fid = fopen(inp.profile_fn);
+    C_0 = cell2mat(textscan(fid,repmat('%f',[1,12]),'headerlines',11,'delimiter',',','multipledelimsasone',1));
+    fclose(fid);
+    % I insist that the first column should be pressure and the second column
+    % be altitude. The third one better to be temperature.
+    C0 = C_0;
+    C0(:,[1 2 3 4 5 6]) = C_0(:,[3 1 2 5 7 10]);
+    % I don't like definition of co2 and ch4. Change them to vmr
+    C0(:,5) = C0(:,5)*1e-6;
+    C0(:,6) = C0(:,6)*1e-9;
+    % add O2 mixing ratio
+    C0(:,7) = ones(size(C0,1),1)*0.2095;
+    C0 = C0(:,1:7);
+    C_0 = C0;
+end
 
 % convert presgrid from Pa (or atm) to hPa if necessary
 if max(C_0(:,1)) > 7.7e4 % I guess a good pressure profile extends below 770 hPa
@@ -151,9 +171,9 @@ for iwin = 1:length(window_list)
             for isublayer = 1:nsublayer
                 eVMR = Csublayer(isublayer,prof_index);  % sublayer VMR
                 % not sure about HDO
-%                 if strcmp(mol_for_fit{imol},'HDO')
-%                     eVMR = eVMR*3.106930e-4;
-%                 end
+                %                 if strcmp(mol_for_fit{imol},'HDO')
+                %                     eVMR = eVMR*3.106930e-4;
+                %                 end
                 inp_interp.Pq = Csublayer(isublayer,1);% sublayer pressure, hPa
                 inp_interp.Tq = Csublayer(isublayer,3);% sublayer temperature, K
                 
@@ -212,6 +232,13 @@ for iwin = 1:length(window_list)
             vlow_gfit = vStart:1:vEnd;
             [~,~,bin] = histcounts(v_grid_gfit,vlow_gfit);
         end
+        if sum(ismember(which_CIA,'hitran'))
+            temp = load([datadir,'Tijs_CIA_127.mat']);
+            vlow_hitran = temp.ciawave;
+            C_hitran = temp.ciaxsec;
+            cia_temp_vec_hitran = temp.ciatemp;
+            [xgrid_hitran,ygrid_hitran] = meshgrid(vlow_hitran,cia_temp_vec_hitran);
+        end
         if sum(ismember(which_CIA,'sao'))
             fid = fopen([datadir,'ani_127.table']);
             C_sao = cell2mat(textscan(fid,'%f%f%f%f%f%f%f','headerlines',1,'delimiter',' ',...
@@ -262,6 +289,9 @@ for iwin = 1:length(window_list)
         if sum(ismember(which_CIA,'mate'))
             dtau_cntm_mate = zeros(nlayer,length(common_grid),'single');
         end
+        if sum(ismember(which_CIA,'hitran'))
+            dtau_cntm_hitran = zeros(nlayer,length(common_grid),'single');
+        end
         for ilayer = 1:nlayer
             MR_O2 = C(ilayer,7); % has to be profile of O2, 0.2095
             MR_N2 = 0.78;
@@ -277,6 +307,17 @@ for iwin = 1:length(window_list)
                 acia_low = MR_O2*scia_low + MR_N2*fcia_low;
                 dtau_cntm_gfit(ilayer,:) = N_ilayer^2*MR_O2*1e5*(C(ilayer,2)-C(ilayer+1,2))*...
                     interp1(0.5*(vlow_gfit(1:end-1)+vlow_gfit(2:end)),acia_low,common_grid);
+            end
+            if sum(ismember(which_CIA,'hitran'))
+                if C(ilayer,3) >= max(cia_temp_vec_hitran)
+                    acia_low = C_hitran(:,end);
+                elseif C(ilayer,3) <= min(cia_temp_vec_hitran)
+                    acia_low = C_hitran(:,1);
+                else
+                    acia_low = interp2(xgrid_hitran,ygrid_hitran,C_hitran',vlow_hitran,C(ilayer,3));
+                end
+                dtau_cntm_hitran(ilayer,:) = N_ilayer^2*MR_O2*1e5*(C(ilayer,2)-C(ilayer+1,2))*...
+                    interp1(vlow_hitran,acia_low,common_grid);
             end
             if sum(ismember(which_CIA,'sao'))
                 if C(ilayer,3) >= max(cia_temp_vec)
@@ -304,6 +345,9 @@ for iwin = 1:length(window_list)
         
         if sum(ismember(which_CIA,'gfit'))
             window_list(iwin).tau_struct.O2.CIA_GFIT = nansum(dtau_cntm_gfit);
+        end
+        if sum(ismember(which_CIA,'hitran'))
+            window_list(iwin).tau_struct.O2.CIA_HITRAN = nansum(dtau_cntm_hitran);
         end
         if sum(ismember(which_CIA,'sao'))
             window_list(iwin).tau_struct.O2.CIA_SAO = nansum(dtau_cntm_sao);

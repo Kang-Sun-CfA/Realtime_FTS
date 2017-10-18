@@ -23,7 +23,7 @@ if ~exist('P_surface','var')
 end
 
 % Load fitting window information and pre-calculated optical depth
-profile_date = '0000';% mmdd, 0000 for US standard atmosphere
+profile_date = '20160624';% yyyymmdd, 20170000 for US standard atmosphere
 profile_hour = '0000';% hhmm, 0000 for US standard atmosphere
 window_list_fn = ['..',sfs,'spectroscopy',sfs,'window_list_',...
     profile_date,'_',profile_hour,'.mat'];
