@@ -8,6 +8,7 @@ function Vout2 = F_interp_absco(inp)
 %      240,250,260,270,280,290,300,310]
 
 % Written by Kang Sun on 2017/04/29
+% Updated by Kang Sun on 2017/11/08 to handle multiple broadener vmr
 
 tempgrid = inp.tempgrid;
 presgrid = inp.presgrid;
@@ -48,6 +49,25 @@ if isfield(inp,'Bq')
     Bq = inp.Bq;
 else
     Bq = 0;
+end
+
+
+if Bq < min(bgrid);Bq = min(bgrid);end
+if Bq > max(bgrid);Bq = max(bgrid);end
+for ib = 1:length(bgrid)-1
+    if Bq == bgrid(ib)
+        bgrid = bgrid(ib);
+        V = V(:,ib,:,:);
+        break;
+    elseif Bq > bgrid(ib) && Bq < bgrid(ib+1)
+        bgrid = bgrid(ib:ib+1);
+        V = V(:,ib:ib+1,:,:);
+        break;
+    elseif Bq == bgrid(ib+1)
+        bgrid = bgrid(ib+1);
+        V = V(:,ib+1,:,:);
+        break;
+    end
 end
 
 if isfield(inp,'n_interp_level')
@@ -137,4 +157,8 @@ for iwv = 1:length(bgrid)
     Wg = permute(Wg,[2 3 1]);
     Vout2(iwv,:) = interpn(single(Pg),single(Tg),single(Wg),single(Vtemp),...
         single(ones(size(Wq))*Pq),single(ones(size(Wq))*Tq),single(Wq));
+end
+
+if length(bgrid) == 2
+    Vout2 = ((Bq-bgrid(1))*Vout2(2,:)+(bgrid(2)-Bq)*Vout2(1,:))/(bgrid(2)-bgrid(1));
 end

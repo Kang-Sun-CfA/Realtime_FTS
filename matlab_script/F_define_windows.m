@@ -56,8 +56,8 @@ switch target_gas
             case 0
                 vStart = 9100; vEnd = 9700;
                 wStart = 9120; wEnd = 9680;
-                mol_for_fit = {'O2','H2O'};
-                mol_for_spec = {'H2O','O2'};
+                mol_for_fit = {'O2','H2O','CO2'};
+                mol_for_spec = {'H2O','O2','CO2'};
         end
     case 'H2O'
         switch windowID

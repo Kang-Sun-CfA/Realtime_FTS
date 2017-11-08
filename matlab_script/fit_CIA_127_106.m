@@ -1,470 +1,720 @@
 % overhaul the fit CIA code to use absco tables
-% updated by Kang Sun from fit_CIA_106.m and F_absco2tau.m on 2017/10/07
+% updated by Kang Sun on 2017/10/23
 
 clear;clc;close all
 % system separator, "/" for mac and linux, "\" for windows
 sfs = filesep;
-inp = [];
+
+% Load fitting window information and pre-calculated optical depth
+profile_date = '20160624';% yyyymmdd, 20170000 for US standard atmosphere
+% profile_date = '20170217';% yyyymmdd, 20170000 for US standard atmosphere
+
+profile_hour = '0000';% hhmm, 0000 for US standard atmosphere
+window_list_fn = ['..',sfs,'spectroscopy',sfs,'window_list_',...
+    profile_date,'_',profile_hour,'_cia.mat'];
+inp_tau = [];
 
 %!!!!!!!!!!!!!!!! local dir saving ABSCO tables !!!!!!!!!!!!!!!!!!!!!!
-inp.absco_dir = '/data/tempo1/Shared/kangsun/FTS_data/HITRAN/';
+inp_tau.absco_dir = '/data/tempo1/Shared/kangsun/FTS_data/HITRAN/';
 %!!!!!!!!!!!!!!!! YOU HAVE TO SPECIFY THIS !!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-inp.CIA_dir = ['..',sfs,'spectroscopy',sfs];
-inp.which_CIA = {'sao','gfit','mate'};
-inp.profile_fn = 'D:\Research_CfA\FTS\20160624\hb20160624.map';
-inp.lowest_possible_Psurf = 980;
-inp.nsublayer = 1;
-inp.common_grid_resolution = 0.05;
-inp.surface_layer_P = 990;
+inp_tau.CIA_dir = ['..',sfs,'spectroscopy',sfs];
+inp_tau.which_CIA = {'sao','gfit','mate','hitran','koenis'};
+
+inp_tau.profile_fn = ['..',sfs,'profiles',sfs,'hb',profile_date,...
+    '.map'];
+inp_tau.lowest_possible_Psurf = 980;
+inp_tau.nsublayer = 1;
+inp_tau.common_grid_resolution = 0.01;
+inp_tau.surface_layer_P = 990;
 
 % end of input
 
-% pressure of lowest level, below which is the adjustable surface layer
-if ~isfield(inp,'lowest_possible_Psurf')
-    inp.lowest_possible_Psurf = 980;
-end
-
-% representative pressure of the surface layer, should be close to the mean
-% of inp.lowest_possible_Psurf and measured instantaneous surface pressure
-if ~isfield(inp,'surface_layer_P')
-    inp.surface_layer_P = 990;
-end
-
-% wavenumber interval to define the output
-if ~isfield(inp,'common_grid_resolution')
-    inp.common_grid_resolution = 0.05;
-end
-
-% how many sublayer to divide each layer into? OCO-2 used 10
-if ~isfield(inp,'nsublayer')
-    inp.nsublayer = 3;
-end
-varname = {'place_holder','Pressure','Temperature','Wavenumber'};
-
-% Bolzmann constant in SI unit
-kB = 1.38064852e-23;
-
-dgrd_fwhm = 2.5*inp.common_grid_resolution;
-
-%% load profile
-fid = fopen(inp.profile_fn);
-C_0 = cell2mat(textscan(fid,repmat('%f',[1,12]),'headerlines',11,'delimiter',',','multipledelimsasone',1));
-% I insist that the first column should be pressure and the second column
-% be altitude. The third one better to be temperature. 
-C0 = C_0;
-C0(:,[1 2 3 4 5 6]) = C_0(:,[3 1 2 5 7 10]);
-% I don't like definition of co2 and ch4. Change them to vmr
-C0(:,5) = C0(:,5)*1e-6;
-C0(:,6) = C0(:,6)*1e-9;
-% add O2 mixing ratio
-C0(:,7) = ones(size(C0,1),1)*0.2095;
-C0 = C0(:,1:7);
-C_0 = C0;
-
-% convert presgrid from Pa (or atm) to hPa if necessary
-if max(C_0(:,1)) > 7.7e4 % I guess a good pressure profile extends below 770 hPa
-    C_0(:,1) = C_0(:,1)/100;
-end
-if max(C_0(:,1)) < 2
-    C_0(:,1) = C_0(:,1)*1.01325e3;
-end
-
-% make sure from low to high pressure, VERY IMPORTANT
-[~,I] = sort(C_0(:,1));C_0 = C_0(I,:);
-
-% trim the lowest part of profiles
-C_low = nan(1,size(C_0,2));
-C_low(1) = inp.lowest_possible_Psurf;
-for i = 2:size(C_0,2)
-    C_low(i) = interp1(C_0(:,1),C_0(:,i),inp.lowest_possible_Psurf);
-end
-
-C = cat(1,C_0(C_0(:,1)-inp.lowest_possible_Psurf < 0,:),C_low);
-
-nsublayer = inp.nsublayer;
-nlevel = size(C,1);
-nlayer = nlevel-1;
-%% make some plots
-if ispc
-load('C:\Users\Kang Sun\Documents\GitHub\Realtime_FTS\spectroscopy\ptgrid.mat')
-load('C:\Users\Kang Sun\Documents\GitHub\Realtime_FTS\spectroscopy\abscoptgrid.mat')
-
-fid = fopen('D:\Research_CfA\FTS\20170217\hb20170217.map');
-C_0 = cell2mat(textscan(fid,repmat('%f',[1,12]),'headerlines',11,'delimiter',',','multipledelimsasone',1));
-% I insist that the first column should be pressure and the second column
-% be altitude. The third one better to be temperature. 
-C0 = C_0;
-C0(:,[1 2 3 4 5 6]) = C_0(:,[3 1 2 5 7 10]);
-% I don't like definition of co2 and ch4. Change them to vmr
-C0(:,5) = C0(:,5)*1e-6;
-C0(:,6) = C0(:,6)*1e-9;
-% add O2 mixing ratio
-C0(:,7) = ones(size(C0,1),1)*0.2095;
-C0 = C0(:,1:7);
-C_0 = C0;
-
-% convert presgrid from Pa (or atm) to hPa if necessary
-if max(C_0(:,1)) > 7.7e4 % I guess a good pressure profile extends below 770 hPa
-    C_0(:,1) = C_0(:,1)/100;
-end
-if max(C_0(:,1)) < 2
-    C_0(:,1) = C_0(:,1)*1.01325e3;
-end
-
-% make sure from low to high pressure, VERY IMPORTANT
-[~,I] = sort(C_0(:,1));C_0 = C_0(I,:);
-
-% trim the lowest part of profiles
-C_low = nan(1,size(C_0,2));
-C_low(1) = inp.lowest_possible_Psurf;
-for i = 2:size(C_0,2)
-    C_low(i) = interp1(C_0(:,1),C_0(:,i),inp.lowest_possible_Psurf);
-end
-
-C_0217 = cat(1,C_0(C_0(:,1)-inp.lowest_possible_Psurf < 0,:),C_low);
-
-close all
-set(0,'defaultaxesfontsize',12)
-figure('unit','inch','color','w','position',[15 1 14 6])
-subplot(1,2,1)
-semilogy(tempgrid_absco,presgrid_absco,'.k','markersize',12);axis ij
-hold on
-hw = plot(C_0217(:,3),C_0217(:,1)*100,'b','linewidth',3);
-hs = plot(C(:,3),C(:,1)*100,'r','linewidth',3);
-hold off
-set(gca,'xlim',[150 350],'ylim',[1 1.2e5],'linewidth',1,'box','off')
-ylabel('Pressure [Pa]')
-xlabel('Temperature [K]')
-hleg = legend([hw hs],'Winter (Feb 17, 2017)','Summer (Jun 24, 2016)');
-set(hleg,'box','off')
-title('OCO-2 ABSCO P/T grid','fontsize',16)
-
-subplot(1,2,2)
-semilogy(tempgrid,presgrid,'.k','markersize',12);axis ij
-hold on
-hw = plot(C_0217(:,3),C_0217(:,1)*100,'b','linewidth',3);
-hs = plot(C(:,3),C(:,1)*100,'r','linewidth',3);
-hold off
-set(gca,'xlim',[150 350],'ylim',[1 1.2e5],'linewidth',1,'box','off')
-xlabel('Temperature [K]')
-title('Modified P/T grid','fontsize',16)
+window_list = F_absco2tau_flexible(inp_tau);
+save(window_list_fn,'window_list')
 %%
+load(window_list_fn)
+% %% add HDO and potentially other non-absco molecules
+% % which window to add more molecules?
+% iwin = 2;
+% % load US standard atmosphere
+% fid = fopen('../profiles/profiles_20170000_0000.dat');
+% C = cell2mat(textscan(fid,'%f%f%f%f%f%f%f','delimiter',' ','multipledelimsasone',1,'headerlines',11));
+% 
+% % Dir to save .mat intermediate data files
+% datadir = '../spectroscopy/';
+% % HITRAN molecule parameter file
+% molparampath = '/home/kangsun/Courses/molparam.txt';
+% 
+% P_prof = C(:,1);
+% T_prof = C(:,3);
+% H_prof = C(:,2);
+% H2O_prof = C(:,4);
+% 
+% nlevel = length(P_prof);
+% nlayer = nlevel-1;
+% input_LBL = [];
+% input_LBL.P_level = P_prof;
+% input_LBL.P_layer = P_prof(1:end-1)+diff(P_prof)/2;
+% input_LBL.T_layer = interp1(P_prof,T_prof,input_LBL.P_layer);
+% input_LBL.Z_level = H_prof;
+% input_LBL.Z_layer = interp1(P_prof,H_prof,input_LBL.P_layer);
+% input_LBL.common_grid = window_list(iwin).common_grid;
+% input_LBL.taumol = 'H2O';
+% input_LBL.profile = interp1(P_prof,H2O_prof,input_LBL.P_layer);
+% input_LBL.molparampath = molparampath;
+% input_LBL.datadir = datadir;
+% input_LBL.which_CIA = {'gfit','sao','mate'};% keep lower case
+% 
+% output_LBL_H2O = F_line_by_line(input_LBL);
+% %% compare optical depth of H2O from absco and lbl
+% % I found that the 1.06 um window does not have HDO.
+% close
+% subplot(2,1,1)
+% plot(window_list(iwin).common_grid,squeeze(sum(output_LBL_H2O.dtau_layer(1,:,:),3)))
+% subplot(2,1,2)
+% plot(window_list(iwin).common_grid,squeeze(sum(output_LBL_H2O.dtau_layer(2,:,:),3)))
+% %% check hdo
+% load('../spectroscopy/FTS_5000to12000.mat');
+% int = lines.moleculeNumber == 1 & lines.isotopologueNumber == 4;
+% plot(lines.transitionWavenumber(int),lines.lineIntensity(int),'.')
+% xlim([7700 8050])
+% xlim([9100 9700])
+% %% test the effect of broadening. Results: it does show difference in tau, but not so much in residual. Disappointing
+% clear;clc;close all
+% % system separator, "/" for mac and linux, "\" for windows
+% sfs = filesep;
+% 
+% % Load fitting window information and pre-calculated optical depth
+% profile_date = '20160624';% yyyymmdd, 20170000 for US standard atmosphere
+% % profile_date = '20170217';% yyyymmdd, 20170000 for US standard atmosphere
+% 
+% profile_hour = '0000';% hhmm, 0000 for US standard atmosphere
+% window_list_fn = ['..',sfs,'spectroscopy',sfs,'window_list_',...
+%     profile_date,'_',profile_hour,'_cia.mat'];
+% inp_tau = [];
+% 
+% %!!!!!!!!!!!!!!!! local dir saving ABSCO tables !!!!!!!!!!!!!!!!!!!!!!
+% inp_tau.absco_dir = '/data/tempo1/Shared/kangsun/FTS_data/HITRAN/';
+% %!!!!!!!!!!!!!!!! YOU HAVE TO SPECIFY THIS !!!!!!!!!!!!!!!!!!!!!!!!!!!
+% 
+% inp_tau.CIA_dir = ['..',sfs,'spectroscopy',sfs];
+% inp_tau.which_CIA = {'sao','gfit','mate','hitran','koenis'};
+% 
+% inp_tau.profile_fn = ['..',sfs,'profiles',sfs,'hb',profile_date,...
+%     '.map'];
+% inp_tau.lowest_possible_Psurf = 980;
+% inp_tau.nsublayer = 1;
+% inp_tau.common_grid_resolution = 0.01;
+% inp_tau.surface_layer_P = 990;
+% 
+% % end of input
+% 
+% window_list1 = F_absco2tau_flexible(inp_tau);
+% inp_tau.if_broadening = true;
+% window_list2 = F_absco2tau_flexible(inp_tau);
+% %%
+% iwin = 2;
+% plot(window_list1(iwin).common_grid,window_list1(iwin).tau_struct.H2O.Tau_sum,...
+%     window_list2(iwin).common_grid,window_list2(iwin).tau_struct.H2O.Tau_sum)
+% %%
+% plot(window_list1(1).common_grid,window_list1(1).tau_struct.O2.Tau_sum,...
+%     window_list2(1).common_grid,window_list2(1).tau_struct.O2.Tau_sum)
+%% 
+common_grid_resolution = mean(diff(window_list(1).common_grid));
+% Half length of the ILS, the longer the more accurate and slower
+ilsextent = 10; % wavenumber
+% find an OPUS file with the same ILS as the measurements
+ils_fn = '/data/tempo1/Shared/kangsun/FTS_data/EM27_data/em27spectra/160624/hb20160625s0e00a.0019';
+
+input_ils = [];
+input_ils.filename = ils_fn;
+input_ils.sim_wn = 1.579792480468750e+04/2;
+input_ils.phase_error = 0*5.412e-1;
+input_ils.apokind = 7; % should be consistent with apokind in config
+input_ils.zerofillingfactor = 6;
+output_ils = F_calmat_ils(input_ils);
+nmax = output_ils.nmax;
+ilsx0 = output_ils.ilsx-input_ils.sim_wn;
+int = ilsx0 >= -ilsextent & ilsx0 <= ilsextent;
+ilsx0 = ilsx0(int);
+ilsy0 = double(output_ils.ilsy(int)/sqrt(nmax));
+ilsx = -ilsextent:common_grid_resolution:ilsextent;
+ilsy = interp1(ilsx0,ilsy0,ilsx,'linear','extrap');
+ilsy = ilsy/abs(sum(ilsy));
+
+% initialize the input
+config = [];
+
+config.apokind = 7;
+
+% lower and upper limit of output spectrum, in cm-1
+config.lowerlim = 5000;
+config.upperlim = 10000;
+
+% display processing message or not. I'd like it to be off
+config.display = false;
+
+config.ifamf = true;
+
+% coordinate and altitude (km) of measurement location
+config.loclat = 42.377162;
+config.loclon = -71.113461;
+config.localt = 0.22;
+
+% time difference compared to UTC in hour
+config.timezone = -5;
+filename = '/data/tempo1/Shared/kangsun/FTS_data/EM27_data/em27spectra/160624/hb20160625s0e00a.0019';
+
+calmat = F_calmat(filename,config);
+%%
+common_grid_resolution = mean(diff(window_list(1).common_grid));
+% Half length of the ILS, the longer the more accurate and slower
+ilsextent = 10; % wavenumber
+% find an OPUS file with the same ILS as the measurements
+ils_fn = ['..',sfs,'spectra',sfs,'160624',sfs,'hb20160624s0e00a.1138'];
+input_ils = [];
+input_ils.filename = ils_fn;
+input_ils.sim_wn = 1.579792480468750e+04/2;
+input_ils.phase_error = 0*5.412e-1;
+input_ils.apokind = 7; % should be consistent with apokind in config
+input_ils.zerofillingfactor = 6;
+output_ils = F_calmat_ils(input_ils);
+nmax = output_ils.nmax;
+ilsx0 = output_ils.ilsx-input_ils.sim_wn;
+int = ilsx0 >= -ilsextent & ilsx0 <= ilsextent;
+ilsx0 = ilsx0(int);
+ilsy0 = double(output_ils.ilsy(int)/sqrt(nmax));
+ilsx = -ilsextent:common_grid_resolution:ilsextent;
+ilsy = interp1(ilsx0,ilsy0,ilsx,'linear','extrap');
+ilsy = ilsy/abs(sum(ilsy));
+
+% initialize the input
+config = [];
+
+config.apokind = 7;
+
+% lower and upper limit of output spectrum, in cm-1
+% config.lowerlim = 5000;
+% config.upperlim = 10000;
+
+% display processing message or not. I'd like it to be off
+config.display = false;
+
+config.ifamf = true;
+
+% coordinate and altitude (km) of measurement location
+config.loclat = 39.767;
+config.loclon = -86.15;
+config.localt = 0.22;
+
+% time difference compared to UTC in hour
+config.timezone = -5;
+filename = '/data/tempo1/Shared/kangsun/FTS_data/EM27_data/em27spectra/160624/hb20160625s0e00a.0019';
+calmat = F_calmat(filename,config);
+%%
+Results = cell(length(window_list),2);
+load(['..',sfs,'spectroscopy',sfs,'FTS_solar.mat'],'llwaven','lltranswaven')
+%%
+clc
+P_surface = 1020;
+clc; close all
+input_nlinfit = [];
+input_nlinfit.ils = ilsy;
+optional_fields = {'shift_gas','shift_sun','shift_together','scaling','tilt','zlo'};
+optional_fields_ap = [0,           0,          0,               1,       0,     0];
+% the following index combined should cover
+% 1:length(optional_fields)
+input_fields_index = [ 3];% index as input
+fit_fields_index = [1 2 4 5 6];% index included in fitting
+input_fields = optional_fields(input_fields_index);
+input_value = optional_fields_ap(input_fields_index);
+for i = 1:length(input_value)
+    input_nlinfit.(input_fields{i}) = input_value(i);
+end
+if ~exist('ss','var')
+    ss = cell(length(window_list),1);
+end
+
+CC = lines(5);
+window_list(2).wRange = [7765, 8035];
+window_list(1).wRange = [9200, 9590];
+
+addpath('~/matlab functions/export_fig/')
+which_CIA = 'GFIT';
+
+iwin = 1;%length(window_list)
+target_gas = window_list(iwin).target_gas;
+windowID = window_list(iwin).windowID;
+common_grid = window_list(iwin).common_grid;
+
+vStart = window_list(iwin).vRange(1);
+vEnd = window_list(iwin).vRange(2);
+
+wStart = window_list(iwin).wRange(1);
+wEnd = window_list(iwin).wRange(2);
+
+interval = calmat.x >= wStart & calmat.x <= wEnd;
+
+w2 = calmat.x(interval);
+s2 = double(calmat.spec(interval));
+w2 = w2(:);s2 = s2(:)/max(s2);
+
+if isempty(ss{iwin})
+    int = llwaven >= vStart & llwaven <= vEnd;
+    llwave = llwaven(int);lltrans = lltranswaven(int);
+    ss{iwin} = F_conv_interp(llwave,lltrans,...
+        2.5*common_grid_resolution,common_grid);
+end
+input_nlinfit.ss = ss{iwin};
+
+% this is very similar to mol_for_fit, except O2 CIA
+fit_spec_names = fieldnames(window_list(iwin).tau_struct);
+n_fit_spec = length(fit_spec_names);
+input_nlinfit.s1 = nan(n_fit_spec,length(common_grid));
+for i_fit_spec = 1:n_fit_spec
+    tmp_tau_prof = window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).Tau_sum;
+    tmp_tau_sfc = window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_sigma/1e4... % absorption cross section in m2
+        *(P_surface-window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_top_P)*100 ... % surface layer thickness in Pa
+        /(0.029/6.02e23*9.8) ... % air molecular weight and g
+        *window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_VMR;
+    input_nlinfit.s1(i_fit_spec,:) = double(tmp_tau_prof+tmp_tau_sfc);
+end
+
+n_fit_spec = n_fit_spec+1;
+tau_CIA = double(window_list(iwin).tau_struct.O2.(['CIA_',which_CIA]));
+%     tau_CIA = double(window_list(iwin).tau_struct.O2.CIA_GFIT);
+input_nlinfit.s1 = cat(1,input_nlinfit.s1,tau_CIA);
+
+input_nlinfit.ils = ilsy;
+input_nlinfit.w2 = w2;
+input_nlinfit.w1 = common_grid;
+
+%             input_nlinfit.shift_gas = 0;
+%             % input_nlinfit.shift_sun = 0;
+input_nlinfit.shift_together = 0;
+%             % input_nlinfit.scaling = 1;
+%             % input_nlinfit.tilt = 0;
+%             % input_nlinfit.zlo = 0;
+
+if iwin == 1
+    input_nlinfit.coeff_bound = [-inf, -inf, -inf, -inf, -inf, -inf, -inf, 16, -inf;
+        inf, inf, inf, inf, inf, inf, inf, 18, inf];
+end
+coeff0 = [optional_fields_ap(fit_fields_index) ones(1,n_fit_spec)*16.878];
+[coeff, R] = nlinfit(input_nlinfit,s2,@F_forward,coeff0);
+
+f_gfit = F_forward(coeff,input_nlinfit);
+coeff_gfit = coeff;
+R_gfit = R;
+
+which_CIA = 'HITRAN';
+input_nlinfit.s1(end,:) = double(window_list(iwin).tau_struct.O2.(['CIA_',which_CIA]));
+if iwin == 1
+    input_nlinfit.coeff_bound = [-inf, -inf, -inf, -inf, -inf, -inf, -inf, 16, -inf;
+        inf, inf, inf, inf, inf, inf, inf, 18, inf];
+end
+coeff0 = [optional_fields_ap(fit_fields_index) ones(1,n_fit_spec)*16.878];
+[coeff, R] = nlinfit(input_nlinfit,s2,@F_forward,coeff0);
+
+f_theory = F_forward(coeff,input_nlinfit);
+coeff_theory = coeff;
+R_theory = R;
+
+which_CIA = 'Koenis';
+input_nlinfit.s1(end,:) = double(window_list(iwin).tau_struct.O2.(['CIA_',which_CIA]));
+if iwin == 1
+    input_nlinfit.coeff_bound = [-inf, -inf, -inf, -inf, -inf, -inf, -inf, 16, -inf;
+        inf, inf, inf, inf, inf, inf, inf, 18, inf];
+end
+coeff0 = [optional_fields_ap(fit_fields_index) ones(1,n_fit_spec)*16.878];
+[coeff, R] = nlinfit(input_nlinfit,s2,@F_forward,coeff0);
+
+f_koenis = F_forward(coeff,input_nlinfit);
+coeff_koenis = coeff;
+R_koenis = R;
+
+%%
+stretchx = 1.1;
+stretchy = 1.15;
 close all
-set(0,'defaultaxesfontsize',12)
-ivar = 3;
-switch ivar
-    case 2
-Xlim = [-0.3 2.1];
-offset = 0.1;
-    case 3
-        Xlim = [270 310];
-        offset = 1.5;
-end
-Ylim = [780 1050];
-figure('unit','inch','color','w','position',[-15 1 12 6])
-subplot(1,3,1)
-hold on
-plot(C_0(:,ivar),C_0(:,1),'-O','linewidth',2);axis ij
-count = 0;
-for i = size(C_0,1):-1:size(C_0,1)-3
-    plot([Xlim(1) C_0(i,ivar)],[C_0(i,1),C_0(i,1)],':k')
-    text(C_0(i,ivar)+offset,C_0(i,1),['Level ',num2str(count)],...
-        'horizontalalignment','left','fontsize',16);
-    count = count+1;
-end
-plot(C_low(ivar),C_low(1),'rp','linewidth',2,'markersize',16)
-text(C_low(ivar)+offset,C_low(1)+0.,['Lowest possible',char(10), 'surface pressure'],...
-        'horizontalalignment','left','fontsize',14);
+figure('unit','inch','color','w','position',[0 0 12 7])
+subplot(3,2,2)
+plot(w2,s2,'k')
+ylim([0 1.05])
+xlim([9200 9600])
+set(gca,'linewidth',1,'box','off')
+set(gca,'xcolor','none')
+pos = get(gca,'position');
+set(gca,'position',[pos(1:2) pos(3)*stretchx pos(4)*stretchy],'xgrid','on')
+title('(d) $X^3\Sigma_g^-(v=0) \rightarrow a^1\Delta_g(v=1)$: observation','interpreter','latex')
 
+subplot(3,2,4)
+hold on
+input_nlinfit.coeff_bound = [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf;
+        inf, inf, inf, inf, inf, inf, inf, inf, inf];
+plot(w2,F_forward([coeff_gfit(1:5) 0 coeff_gfit(7) 0 0],input_nlinfit))
+plot(w2,F_forward([coeff_gfit(1:5) 0 0 0 coeff_gfit(9)],input_nlinfit))
+plot(w2,F_forward([coeff_gfit(1:5) coeff_gfit(6) 0 0 0],input_nlinfit))
+plot(w2,F_forward([coeff_gfit(1:5) 0 0 coeff_gfit(8) 0],input_nlinfit))
+plot(w2,F_forward([coeff_gfit(1:5) 0 0 0 0],input_nlinfit),'k')
+ylim([0 1.05])
+xlim([9200 9600])
+set(gca,'linewidth',1,'box','off')
+set(gca,'xcolor','none')
+pos = get(gca,'position');
+set(gca,'position',[pos(1:2) pos(3)*stretchx pos(4)*stretchy],'xgrid','on')
+hleg = legend('H_2O','O_2 CIA','O_2','CO_2','Solar');
+set(hleg,'location','southeast','box','off')
+title('(e) $X^3\Sigma_g^-(v=0) \rightarrow a^1\Delta_g(v=1)$: absorbers','interpreter','latex')
+
+subplot(3,2,6)
+h = plot(w2,R_gfit,'k',w2,R_theory,w2,R_koenis);%,w2,s2-f_gfit)
+ylim([-0.05 0.05])
+xlim([9200 9600])
+set(gca,'linewidth',1,'box','off')
+pos = get(gca,'position');
+set(gca,'position',[pos(1:2) pos(3)*stretchx pos(4)*stretchy],'xgrid','on')
+hleg = legend('GGG2014','Theory','Experiment');
+set(hleg,'location','south','orientation','hori','box','off')
+
+xlabel('Frequency [cm$^{-1}$]','interpreter','latex')
+title('(f) $X^3\Sigma_g^-(v=0) \rightarrow a^1\Delta_g(v=1)$: fitting residuals','interpreter','latex')
+
+%% 1.27 um
+P_surface = 1020;
+clc; 
+input_nlinfit = [];
+input_nlinfit.ils = ilsy;
+optional_fields = {'shift_gas','shift_sun','shift_together','scaling','tilt','zlo'};
+optional_fields_ap = [0,           0,          0,               1,       0,     0];
+% the following index combined should cover
+% 1:length(optional_fields)
+input_fields_index = [ 3];% index as input
+fit_fields_index = [1 2 4 5 6];% index included in fitting
+input_fields = optional_fields(input_fields_index);
+input_value = optional_fields_ap(input_fields_index);
+for i = 1:length(input_value)
+    input_nlinfit.(input_fields{i}) = input_value(i);
+end
+if ~exist('ss','var')
+    ss = cell(length(window_list),1);
+end
+
+CC = lines(5);
+window_list(2).wRange = [7765, 8035];
+window_list(1).wRange = [9200, 9590];
+
+iwin = 2;%length(window_list)
+target_gas = window_list(iwin).target_gas;
+windowID = window_list(iwin).windowID;
+common_grid = window_list(iwin).common_grid;
+
+vStart = window_list(iwin).vRange(1);
+vEnd = window_list(iwin).vRange(2);
+
+wStart = window_list(iwin).wRange(1);
+wEnd = window_list(iwin).wRange(2);
+
+interval = calmat.x >= wStart & calmat.x <= wEnd;
+
+w2 = calmat.x(interval);
+s2 = double(calmat.spec(interval));
+w2 = w2(:);s2 = s2(:)/max(s2);
+
+if isempty(ss{iwin})
+    int = llwaven >= vStart & llwaven <= vEnd;
+    llwave = llwaven(int);lltrans = lltranswaven(int);
+    ss{iwin} = F_conv_interp(llwave,lltrans,...
+        2.5*common_grid_resolution,common_grid);
+end
+input_nlinfit.ss = ss{iwin};
+
+% this is very similar to mol_for_fit, except O2 CIA
+fit_spec_names = fieldnames(window_list(iwin).tau_struct);
+n_fit_spec = length(fit_spec_names);
+input_nlinfit.s1 = nan(n_fit_spec,length(common_grid));
+for i_fit_spec = 1:n_fit_spec
+    tmp_tau_prof = window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).Tau_sum;
+    tmp_tau_sfc = window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_sigma/1e4... % absorption cross section in m2
+        *(P_surface-window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_top_P)*100 ... % surface layer thickness in Pa
+        /(0.029/6.02e23*9.8) ... % air molecular weight and g
+        *window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_VMR;
+    input_nlinfit.s1(i_fit_spec,:) = double(tmp_tau_prof+tmp_tau_sfc);
+end
+
+n_fit_spec = n_fit_spec+1;
+% tau_CIA = double(window_list(iwin).tau_struct.O2.(['CIA_',which_CIA]));
+tau_CIA = double(window_list(iwin).tau_struct.O2.CIA_GFIT);
+input_nlinfit.s1 = cat(1,input_nlinfit.s1,tau_CIA);
+
+input_nlinfit.ils = ilsy;
+input_nlinfit.w2 = w2;
+input_nlinfit.w1 = common_grid;
+
+%             input_nlinfit.shift_gas = 0;
+%             % input_nlinfit.shift_sun = 0;
+input_nlinfit.shift_together = 0;
+%             % input_nlinfit.scaling = 1;
+%             % input_nlinfit.tilt = 0;
+%             % input_nlinfit.zlo = 0;
+
+
+coeff0 = [optional_fields_ap(fit_fields_index) ones(1,n_fit_spec)*16.878];
+[coeff, R] = nlinfit(input_nlinfit,s2,@F_forward,coeff0);
+
+f_gfit = F_forward(coeff,input_nlinfit);
+coeff_gfit = coeff;
+R_gfit = R;
+
+which_CIA = 'HITRAN';
+input_nlinfit.s1(end,:) = double(window_list(iwin).tau_struct.O2.(['CIA_',which_CIA]));
+if iwin == 1
+    input_nlinfit.coeff_bound = [-inf, -inf, -inf, -inf, -inf, -inf, -inf, 16, -inf;
+        inf, inf, inf, inf, inf, inf, inf, 18, inf];
+end
+coeff0 = [optional_fields_ap(fit_fields_index) ones(1,n_fit_spec)*16.878];
+[coeff, R] = nlinfit(input_nlinfit,s2,@F_forward,coeff0);
+
+f_theory = F_forward(coeff,input_nlinfit);
+coeff_theory = coeff;
+R_theory = R;
+
+which_CIA = 'Mate';
+input_nlinfit.s1(end,:) = double(window_list(iwin).tau_struct.O2.(['CIA_',which_CIA]));
+if iwin == 1
+    input_nlinfit.coeff_bound = [-inf, -inf, -inf, -inf, -inf, -inf, -inf, 16, -inf;
+        inf, inf, inf, inf, inf, inf, inf, 18, inf];
+end
+coeff0 = [optional_fields_ap(fit_fields_index) ones(1,n_fit_spec)*16.878];
+[coeff, R] = nlinfit(input_nlinfit,s2,@F_forward,coeff0);
+
+f_mate = F_forward(coeff,input_nlinfit);
+coeff_mate = coeff;
+R_mate = R;
+%%
+subplot(3,2,1)
+plot(w2,s2/coeff_gfit(3),'k')
+ylim([0 1.05])
+xlim([7765, 8035])
+set(gca,'linewidth',1,'box','off')
+set(gca,'xcolor','none')
+pos = get(gca,'position');
+set(gca,'position',[pos(1:2) pos(3)*stretchx pos(4)*stretchy],'xgrid','on')
+title('(a) $X^3\Sigma_g^-(v=0) \rightarrow a^1\Delta_g(v=0)$: observation','interpreter','latex')
+
+subplot(3,2,3)
+hold on
+plot(w2,F_forward([coeff_gfit(1:5) 0 coeff_gfit(7) 0],input_nlinfit)/coeff_gfit(3))
+plot(w2,F_forward([coeff_gfit(1:5) 0 0 coeff_gfit(8)],input_nlinfit)/coeff_gfit(3))
+plot(w2,F_forward([coeff_gfit(1:5) coeff_gfit(6) 0 0],input_nlinfit)/coeff_gfit(3))
+plot(w2,F_forward([coeff_gfit(1:5) 0 0 0],input_nlinfit)/coeff_gfit(3),'k')
+ylim([0 1.05])
+xlim([7765, 8035])
+set(gca,'linewidth',1,'box','off')
 hold off
-ylim(Ylim)
-xlim(Xlim)
-title('A priori profiles','fontsize',16)
-set(gca,'linewidth',1)
-ylabel('Pressure [hPa]')
-subplot(1,3,2)
-hold on
-plot(C(:,ivar),C(:,1),'-O','linewidth',2);axis ij
-count = 0;
-for i = size(C,1):-1:size(C,1)-3
-    plot([Xlim(1) C(i,ivar)],[C(i,1),C(i,1)],':k')
-    text(C(i,ivar)+offset,C(i,1),['Level ',num2str(count)],...
-        'horizontalalignment','left','fontsize',16);
-    count = count+1;
+set(gca,'xcolor','none')
+pos = get(gca,'position');
+set(gca,'position',[pos(1:2) pos(3)*stretchx pos(4)*stretchy],'xgrid','on')
+hleg = legend('H_2O','O_2 CIA','O_2','Solar');
+set(hleg,'location','southeast','box','off')
+title('(b) $X^3\Sigma_g^-(v=0) \rightarrow a^1\Delta_g(v=0)$: absorbers','interpreter','latex')
+
+
+subplot(3,2,5)
+h=plot(w2,R_gfit/coeff_gfit(3),'k',w2,R_theory/coeff_gfit(3),w2,R_mate/coeff_gfit(3));%,w2,s2-f_gfit)
+xlim([7765, 8035])
+ylim([-0.05 0.05])
+set(gca,'linewidth',1,'box','off')
+pos = get(gca,'position');
+set(gca,'position',[pos(1:2) pos(3)*stretchx pos(4)*stretchy],'xgrid','on')
+hleg = legend('GGG2014','Theory','Experiment');
+set(hleg,'location','south','orientation','hori','box','off')
+% uistack(h(1),'top')
+% uistack(h(2),'top')
+
+xlabel('Frequency [cm$^{-1}$]','interpreter','latex')
+title('(c) $X^3\Sigma_g^-(v=0) \rightarrow a^1\Delta_g(v=0)$: fitting residuals','interpreter','latex')
+%%
+export_fig('../figures/CIA_validation.pdf')
+%%
+
+   
+%     close
+    figure('unit','inch','color','w','position',[5 1 7 7])
+    ax1 = subplot(2,1,1);
+    bsln = polyval([coeff(4), coeff(3)],w2-mean(w2));
+    h = plot(w2,s2./bsln-coeff(5),'k',w2,F_forward(coeff,input_nlinfit)./bsln-coeff(5),'linewidth',.5);
+    set(h(2),'color',CC(3,:))
+    hold on
+%     tmp = conv(input_nlinfit.ss,ilsy/sum(ilsy),'same');
+%     tmp = interp1(input_nlinfit.w1,tmp,w2,'linear','extrap');
+%     plot(w2,tmp)
+    for is1 = size(input_nlinfit.s1,1)
+        tmp = conv(exp(-input_nlinfit.s1(is1,:)*coeff(5+is1)),ilsy/sum(ilsy),'same');
+    tmp = interp1(input_nlinfit.w1,tmp,w2,'linear','extrap');
+    plot(w2,tmp,'linewidth',1.5)
+    end
+    set(gca,'xticklabel',[])
+    title(which_CIA)
+    ylim([-0.05 1.05])
+    hleg = legend('Observation','Fitting','CIA transmission');set(hleg,'box','off')
+    if iwin == 1;set(hleg,'location','east');end
+    
+    ax2 = subplot(2,1,2);
+    h = plot(w2,(s2-F_forward(coeff,input_nlinfit))./bsln,'k','linewidth',1.);
+    pos = get(ax1,'position');
+    set(ax1,'linewidth',1,'position',[pos(1) pos(2)-0.2 pos(3) pos(4)+0.2],...
+        'xlim',[wStart wEnd])
+    
+    pos = get(ax2,'position');
+    set(ax2,'linewidth',1,'position',[pos(1) pos(2) pos(3) pos(4)-0.15],...
+        'xlim',[wStart wEnd])
+    xlabel('Wavenumber')
+    ylim([-0.05 0.05])
+    hleg = legend(['Residual, rms = ',num2str(100*rms((s2-F_forward(coeff,input_nlinfit))./bsln),3),'%']);set(hleg,'box','off','location','north')
+%     export_fig(['../figures/CIA_absco_',which_CIA,'_',num2str(mean([vStart,vEnd])),'.pdf'],'-q150')
+    %
+    
+    Results{iwin,1} = coeff;
+    Results{iwin,2} = [w2,s2,R]';
+
+
+%%
+
+which_CIA = 'HITRAN';
+% which_CIA = 'GFIT';
+
+P_surface = 1020;
+clc;close all
+input_nlinfit = [];
+input_nlinfit.ils = ilsy;
+optional_fields = {'shift_gas','shift_sun','shift_together','scaling','tilt','zlo'};
+optional_fields_ap = [0,           0,          0,               1,       0,     0];
+% the following index combined should cover
+% 1:length(optional_fields)
+input_fields_index = [ 3];% index as input
+fit_fields_index = [1 2 4 5 6];% index included in fitting
+input_fields = optional_fields(input_fields_index);
+input_value = optional_fields_ap(input_fields_index);
+for i = 1:length(input_value)
+    input_nlinfit.(input_fields{i}) = input_value(i);
 end
-plot(C_low(ivar),C_low(1),'rp','linewidth',2,'markersize',16)
-text(C_low(ivar)-offset,C_low(1)+0.,['Lowest possible',char(10), 'surface pressure'],...
-        'horizontalalignment','right','fontsize',14);
-
-hold off
-ylim(Ylim)
-xlim(Xlim)
-title('Truncated profiles','fontsize',16)
-set(gca,'linewidth',1,'ycolor','w','ytick',[])
-xlabel('Temperature [km], but can be VMRs')
-% ylabel('Relative altitude [km]')
-
-subplot(1,3,3)
-hold on
-hold on
-plot(C(:,ivar),C(:,1),'-O','linewidth',2);axis ij
-count = 0;
-for i = size(C,1):-1:size(C,1)-3
-    plot([Xlim(1) C(i,ivar)],[C(i,1),C(i,1)],':k')
-    text(C(i,ivar)+offset,C(i,1),['Level ',num2str(count)],...
-        'horizontalalignment','left','fontsize',16);
-    count = count+1;
+if ~exist('ss','var')
+    ss = cell(length(window_list),1);
 end
 
-P_surface = 999;
-plot(C(end,ivar),P_surface,'k^','linewidth',2,'markersize',10);
+CC = lines(5);
+window_list(2).wRange = [7760, 8035];
+window_list(1).wRange = [9200, 9600];
 
-text(C(end,ivar)+offset,P_surface+10,['Real-time',char(10),'surface pressure'],...
-        'horizontalalignment','left','fontsize',14);
-    plot([Xlim(1) C(end,ivar)],[P_surface,P_surface],':k')
-ha = area([Xlim(1) C(end,ivar)],[C(end,1),C(end,1);P_surface-C(end,1),P_surface-C(end,1)]');
-set(ha(1),'facecolor','none','edgecolor','none')
-set(ha(2),'facecolor','c','edgecolor','none')
-uistack(ha,'bottom')
-hold off
-ylim(Ylim)
-xlim(Xlim)
-title('Truncated profiles+adjustable surface layer','fontsize',16)
-set(gca,'linewidth',1,'ycolor','w','ytick',[])
-end
-%% %%%% Define retrieval windows
-field1 = 'target_gas';
-field2 = 'windowID';
-field3 = 'common_grid';
-field4 = 'tau_struct';
-field5 = 'vRange';
-field6 = 'wRange';
-value1 = {'O2','O2'};
-value2 = {0,1};
-window_list = struct(field1,value1,field2,value2,field3,[],field4,[],...
-    field5,[],field6,[]);
-
-for iwin = 1:length(window_list)
+addpath('~/matlab functions/export_fig/')
+for iwin = 1:1%length(window_list)
     target_gas = window_list(iwin).target_gas;
     windowID = window_list(iwin).windowID;
-    [vStart, vEnd, wStart, wEnd, mol_for_fit] = ...
-        F_define_windows(target_gas,windowID);
-    common_grid = vStart:inp.common_grid_resolution:vEnd;
-    window_list(iwin).common_grid = common_grid;
-    window_list(iwin).vRange = [vStart,vEnd];
-    window_list(iwin).wRange = [wStart,wEnd];
-    tmp_struct = [];
-    for imol = 1:length(mol_for_fit)
-        absco_fn = [inp.absco_dir,target_gas,'_win',num2str(windowID),'_',...
-            mol_for_fit{imol},'.h5'];
-        if ~exist(absco_fn,'file')
-            error(['No absco file ',target_gas,'_win',num2str(windowID),'_',...
-                mol_for_fit{imol},'.h5!!!'])
-        end
-        switch mol_for_fit{imol}
-            case 'O2'
-                molN = 7;prof_index = 7;
-            case 'CO2'
-                molN = 2;prof_index = 5;
-            case 'CH4'
-                molN = 6;prof_index = 6;
-            case {'H2O','HDO'}
-                molN = 1;prof_index = 4;
-        end
-        varname{1} = ['Gas_',sprintf('%02d',molN),'_Absorption'];
-        % read absco data
-        absco = F_read_hdf(absco_fn,varname);
-        inp_interp = [];
-        inp_interp.tempgrid = absco.Temperature.data;
-        inp_interp.presgrid = absco.Pressure.data;
-        inp_interp.wavegrid = absco.Wavenumber.data;
-        inp_interp.absco = absco.(varname{1}).data;
-        inp_interp.Wq = absco.Wavenumber.data(absco.Wavenumber.data>=vStart & ...
-            absco.Wavenumber.data<=vEnd);
-        % optical depth of each layer, defined at common grid
-        Tau_layer = zeros(nlayer,length(common_grid),'single');
-        count_interp = 0;
-        
-        for ilevel = 1:nlevel-1
-            C1 = C(ilevel,:);C2 = C(ilevel+1,:);
-            dP = C2(1)-C1(1);
-            dZ = -(C2(2)-C1(2));
-            Psublayer = linspace(C1(1)+0.5*dP/nsublayer,C2(1)-0.5*dP/nsublayer,nsublayer);
-            Psublevel = linspace(C1(1),C2(1),nsublayer+1);
-            Zsublevel = interp1([C1(1) C2(1)],[C1(2) C2(2)],Psublevel);
-            Csublayer = nan(nsublayer,size(C,2));
-            Csublayer(:,1) = Psublayer(:);
-            Csublayer(:,2) = -diff(Zsublevel);
-            for iprof = 3:size(C,2);
-                Csublayer(:,iprof) = interp1([C1(1) C2(1)],[C1(iprof) C2(iprof)],Psublayer);
-            end
-            
-            % calculate optical depth of each layer
-            dTau_layer = zeros(1,length(inp_interp.Wq),'single');
-            for isublayer = 1:nsublayer
-                eVMR = Csublayer(isublayer,prof_index);  % sublayer VMR
-                % not sure about HDO
-%                 if strcmp(mol_for_fit{imol},'HDO')
-%                     eVMR = eVMR*3.106930e-4;
-%                 end
-                inp_interp.Pq = Csublayer(isublayer,1);% sublayer pressure, hPa
-                inp_interp.Tq = Csublayer(isublayer,3);% sublayer temperature, K
-                
-                eZ = Csublayer(isublayer,2)*1e5;% sublayer thickness, km->cm
-                eN = eVMR*(inp_interp.Pq*100)/kB/inp_interp.Tq*1e-6; % sublayer number density, mol/cm3
-                eTau = eN*F_interp_absco(inp_interp)*eZ; % sublayer optical depth
-                eTau(isnan(eTau)) = 0;
-                count_interp = count_interp+1;
-                dTau_layer = dTau_layer+eTau;
-            end
-            % convolve and interpolate sum of sublayers into each layer, at
-            % common grid
-            Tau_layer(ilevel,:) = ...
-                F_conv_interp(inp_interp.Wq,dTau_layer,dgrd_fwhm,common_grid);
-        end
-        tmp_struct.(mol_for_fit{imol}).Tau_sum = sum(Tau_layer);
-        
-        % calculate the absorption cross-section at the sfc layer
-        inp_interp.Tq = mean([C(end,3) C_0(end,3)]);
-        inp_interp.Pq = inp.surface_layer_P;
-        tmp_struct.(mol_for_fit{imol}).surface_layer_sigma = ...
-            F_conv_interp(inp_interp.Wq,...
-            F_interp_absco(inp_interp),dgrd_fwhm,common_grid);
-        % sfc layer pressure in hPa
-        tmp_struct.(mol_for_fit{imol}).surface_layer_top_P = ...
-            inp.lowest_possible_Psurf;
-        % sfc layer VMR
-        tmp_struct.(mol_for_fit{imol}).surface_layer_VMR = C(end,prof_index);
-    end
-    window_list(iwin).tau_struct = tmp_struct;
+    common_grid = window_list(iwin).common_grid;
     
-    % add O2 CIA to the first window
-    if iwin == 1
-        datadir = inp.CIA_dir;
-        if isfield(inp,'which_CIA')
-            which_CIA = inp.which_CIA;
-        else
-            which_CIA = 'gfit';
-        end
-        
-        if ~iscell(which_CIA)
-            which_CIA = {which_CIA};
-        end
-        
-        % load O2 CIA at 1.27 um band
-        if sum(ismember(which_CIA,'gfit'))
-            fciapath = [datadir,'gfit_fcia.mat'];
-            sciapath = [datadir,'gfit_scia.mat'];
-            
-            temp = load(fciapath,'gfit_fcia');
-            gfit_fcia = temp.gfit_fcia;
-            temp = load(sciapath,'gfit_scia');
-            gfit_scia = temp.gfit_scia;
-            
-            v_grid_gfit = vStart:0.02:vEnd;
-            vlow_gfit = vStart:1:vEnd;
-            [~,~,bin] = histcounts(v_grid_gfit,vlow_gfit);
-        end
-        if sum(ismember(which_CIA,'sao'))
-            fid = fopen([datadir,'ani_127.table']);
-            C_sao = cell2mat(textscan(fid,'%f%f%f%f%f%f%f','headerlines',1,'delimiter',' ',...
-                'multipledelimsasone',1));
-            vlow_sao = C_sao(:,1);
-            cia_temp_vec = [298 273 253 228 203 178];
-            [xgrid,ygrid] = meshgrid(vlow_sao,cia_temp_vec);
-        end
-        if sum(ismember(which_CIA,'mate'))
-            ciafname1 = [datadir,'O2-Air_Mate.cia'];
-            % ciafname1 = [datadir,'O2-Air_SN_126.cia'];
-            C_mate = cell(2,1);
-            headers = cell(2,1);
-            lineN = nan(2,1);
-            ciaT = nan(2,1);
-            fid = fopen(ciafname1);
-            count = 0;
-            while 1
-                count = count+1;
-                tline = fgetl(fid);
-                if ~ischar(tline)
-                    break;
-                end
-                headers{count} = tline;
-                temp = textscan(tline,'%s%f%f%f%f%f%f','Delimiter',' ','MultipleDelimsAsOne',1);
-                lineN(count) = temp{4};
-                ciaT(count) = temp{5};
-                C_mate(count) = textscan(fid,'%f%f','Delimiter',' ','MultipleDelimsAsOne',1,...
-                    'collectoutput',1);
-            end
-            fclose(fid);
-            ciaT_mate = ciaT;
-            vlow_mate = C_mate{1}(:,1);
-            C_mate_old = C_mate;
-            c_length = length(C_mate_old);
-            C_mate = repmat(C_mate_old{1}(:,2),[1,length(C_mate_old)]);
-            for imate = 2:c_length
-                C_mate(:,imate) = interp1(C_mate_old{imate}(:,1),C_mate_old{imate}(:,2),vlow_mate,'linear','extrap');
-            end
-            [xgrid_mate,ygrid_mate] = meshgrid(vlow_mate,[253 273 296]);
-        end
-        if sum(ismember(which_CIA,'gfit'))
-            dtau_cntm_gfit = zeros(nlayer,length(common_grid),'single');
-        end
-        if sum(ismember(which_CIA,'sao'))
-            dtau_cntm_sao = zeros(nlayer,length(common_grid),'single');
-        end
-        if sum(ismember(which_CIA,'mate'))
-            dtau_cntm_mate = zeros(nlayer,length(common_grid),'single');
-        end
-        for ilayer = 1:nlayer
-            MR_O2 = C(ilayer,7); % has to be profile of O2, 0.2095
-            MR_N2 = 0.78;
-            % number density of air in this layer in molec/cm3
-            N_ilayer = C(ilayer,1)*100/1e6/kB/C(ilayer,3);
-            if sum(ismember(which_CIA,'gfit'))
-                [~, fcia_temp] = ...
-                    F_CIA2Spec(gfit_fcia,C(ilayer,3),C(ilayer,1),vStart,vEnd,1,v_grid_gfit);
-                [~, scia_temp] = ...
-                    F_CIA2Spec(gfit_scia,C(ilayer,3),C(ilayer,1),vStart,vEnd,1,v_grid_gfit);
-                fcia_low = accumarray(bin(:),fcia_temp,[],@mean);
-                scia_low = accumarray(bin(:),scia_temp,[],@mean);
-                acia_low = MR_O2*scia_low + MR_N2*fcia_low;
-                dtau_cntm_gfit(ilayer,:) = N_ilayer^2*MR_O2*1e5*(C(ilayer,2)-C(ilayer+1,2))*...
-                    interp1(0.5*(vlow_gfit(1:end-1)+vlow_gfit(2:end)),acia_low,common_grid);
-            end
-            if sum(ismember(which_CIA,'sao'))
-                if C(ilayer,3) >= max(cia_temp_vec)
-                    acia_low = C_sao(:,2);
-                elseif C(ilayer,3) <= min(cia_temp_vec)
-                    acia_low = C_sao(:,end);
-                else
-                    acia_low = interp2(xgrid,ygrid,C_sao(:,2:end)',vlow_sao,C(ilayer,3));
-                end
-                dtau_cntm_sao(ilayer,:) = N_ilayer^2*MR_O2*1e5*(C(ilayer,2)-C(ilayer+1,2))*...
-                    interp1(vlow_sao,acia_low,common_grid);
-            end
-            if sum(ismember(which_CIA,'mate'))
-                if C(ilayer,3) >= 296
-                    acia_low = C_mate(:,3);
-                elseif C(ilayer,3) <= 253
-                    acia_low = C_mate(:,1);
-                else
-                    acia_low = interp2(xgrid_mate,ygrid_mate,C_mate',vlow_mate,C(ilayer,3));
-                end
-                dtau_cntm_mate(ilayer,:) = N_ilayer^2*MR_O2*1e5*(C(ilayer,2)-C(ilayer+1,2))*...
-                    interp1(vlow_mate,acia_low,common_grid);
-            end
-        end
-        
-        if sum(ismember(which_CIA,'gfit'))
-            window_list(iwin).tau_struct.O2.CIA_GFIT = nansum(dtau_cntm_gfit);
-        end
-        if sum(ismember(which_CIA,'sao'))
-            window_list(iwin).tau_struct.O2.CIA_SAO = nansum(dtau_cntm_sao);
-        end
-        if sum(ismember(which_CIA,'mate'))
-            window_list(iwin).tau_struct.O2.CIA_Mate = nansum(dtau_cntm_mate);
-        end
+    vStart = window_list(iwin).vRange(1);
+    vEnd = window_list(iwin).vRange(2);
+    
+    wStart = window_list(iwin).wRange(1);
+    wEnd = window_list(iwin).wRange(2);
+    
+    interval = calmat.x >= wStart & calmat.x <= wEnd;
+    
+    w2 = calmat.x(interval);
+    s2 = double(calmat.spec(interval));
+    w2 = w2(:);s2 = s2(:)/max(s2);
+    
+    if isempty(ss{iwin})
+        int = llwaven >= vStart & llwaven <= vEnd;
+        llwave = llwaven(int);lltrans = lltranswaven(int);
+        ss{iwin} = F_conv_interp(llwave,lltrans,...
+            2.5*common_grid_resolution,common_grid);
     end
-    disp(['Finished ',target_gas,' window ',num2str(windowID),' at ',datestr(now)])
+    input_nlinfit.ss = ss{iwin};
+    
+    % this is very similar to mol_for_fit, except O2 CIA
+    fit_spec_names = fieldnames(window_list(iwin).tau_struct);
+    n_fit_spec = length(fit_spec_names);
+    input_nlinfit.s1 = nan(n_fit_spec,length(common_grid));
+    for i_fit_spec = 1:n_fit_spec
+        tmp_tau_prof = window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).Tau_sum;
+        tmp_tau_sfc = window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_sigma/1e4... % absorption cross section in m2
+            *(P_surface-window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_top_P)*100 ... % surface layer thickness in Pa
+            /(0.029/6.02e23*9.8) ... % air molecular weight and g
+            *window_list(iwin).tau_struct.(fit_spec_names{i_fit_spec}).surface_layer_VMR;
+        input_nlinfit.s1(i_fit_spec,:) = double(tmp_tau_prof+tmp_tau_sfc);
+    end
+    
+    n_fit_spec = n_fit_spec+1;
+    tau_CIA = double(window_list(iwin).tau_struct.O2.(['CIA_',which_CIA]));
+    input_nlinfit.s1 = cat(1,input_nlinfit.s1,tau_CIA);
+    
+    input_nlinfit.ils = ilsy;
+    input_nlinfit.w2 = w2;
+    input_nlinfit.w1 = common_grid;
+    
+    %             input_nlinfit.shift_gas = 0;
+    %             % input_nlinfit.shift_sun = 0;
+                 input_nlinfit.shift_together = 0;
+    %             % input_nlinfit.scaling = 1;
+    %             % input_nlinfit.tilt = 0;
+    %             % input_nlinfit.zlo = 0;
+    coeff0 = [optional_fields_ap(fit_fields_index) ones(1,n_fit_spec)*calmat.am];
+    [coeff, R] = nlinfit(input_nlinfit,s2,@F_forward,coeff0);
+    %%
+%     close
+    figure('unit','inch','color','w','position',[5 1 7 7])
+    ax1 = subplot(2,1,1);
+    bsln = polyval([coeff(4), coeff(3)],w2-mean(w2));
+    h = plot(w2,s2./bsln-coeff(5),'k',w2,F_forward(coeff,input_nlinfit)./bsln-coeff(5),'linewidth',.5);
+    set(h(2),'color',CC(3,:))
+    hold on
+%     tmp = conv(input_nlinfit.ss,ilsy/sum(ilsy),'same');
+%     tmp = interp1(input_nlinfit.w1,tmp,w2,'linear','extrap');
+%     plot(w2,tmp)
+    for is1 = size(input_nlinfit.s1,1)
+        tmp = conv(exp(-input_nlinfit.s1(is1,:)*coeff(5+is1)),ilsy/sum(ilsy),'same');
+    tmp = interp1(input_nlinfit.w1,tmp,w2,'linear','extrap');
+    plot(w2,tmp,'linewidth',1.5)
+    end
+    set(gca,'xticklabel',[])
+    title(which_CIA)
+    ylim([-0.05 1.05])
+    hleg = legend('Observation','Fitting','CIA transmission');set(hleg,'box','off')
+    if iwin == 1;set(hleg,'location','east');end
+    
+    ax2 = subplot(2,1,2);
+    h = plot(w2,(s2-F_forward(coeff,input_nlinfit))./bsln,'k','linewidth',1.);
+    pos = get(ax1,'position');
+    set(ax1,'linewidth',1,'position',[pos(1) pos(2)-0.2 pos(3) pos(4)+0.2],...
+        'xlim',[wStart wEnd])
+    
+    pos = get(ax2,'position');
+    set(ax2,'linewidth',1,'position',[pos(1) pos(2) pos(3) pos(4)-0.15],...
+        'xlim',[wStart wEnd])
+    xlabel('Wavenumber')
+    ylim([-0.05 0.05])
+    hleg = legend(['Residual, rms = ',num2str(100*rms((s2-F_forward(coeff,input_nlinfit))./bsln),3),'%']);set(hleg,'box','off','location','north')
+%     export_fig(['../figures/CIA_absco_',which_CIA,'_',num2str(mean([vStart,vEnd])),'.pdf'],'-q150')
+    %%
+    
+    Results{iwin,1} = coeff;
+    Results{iwin,2} = [w2,s2,R]';
 end
+%%
+close all
+subplot(2,1,1)
+plot(w2,s2,'k',w2,F_forward(coeff,input_nlinfit),'linewidth',.5);
+xlim([9390 9395])
+subplot(2,1,2)
+plot(w2,s2-F_forward(coeff,input_nlinfit),'linewidth',.5);
+xlim([9390 9395])
+%%
+iwin = 1;
+Xlim = [9350 9450];
+close all
+semilogy(window_list(iwin).common_grid,window_list(iwin).tau_struct.O2.Tau_sum,...
+    window_list(iwin).common_grid,window_list(iwin).tau_struct.H2O.Tau_sum)
+xlim(Xlim)

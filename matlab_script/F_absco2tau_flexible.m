@@ -1,4 +1,4 @@
-function window_list = F_absco2tau(inp)
+function window_list = F_absco2tau_flexible(inp)
 % function used to generating spectroscopic fitting database offline, after
 % the vertical profiles are available (e.g., from weather forecast)
 
@@ -15,16 +15,9 @@ function window_list = F_absco2tau(inp)
 % updated by Kang Sun on 2017/06/25 to add adjustable surface layer
 % updated by Kang Sun on 2017/10/18 to add HITRAN CIA and make it
 % compatible for GFIT .map profiles
-
-% % inputs for testing
-% clc;clear
-% inp = [];
-% inp.absco_dir = '/data/tempo1/Shared/kangsun/FTS_data/HITRAN/';
-% inp.profile_fn = '~/FTS/toolbox/profiles_0000_0000.dat';
-% inp.lowest_possible_Psurf = 980;
-% inp.nsublayer = 3;
-% inp.common_grid_resolution = 0.01;
-% inp.surface_layer_P = 990;
+% saved from F_absco2tau.m on 2017/10/23 as a testbed for new retrieval
+% windows
+% added 1.06 um CRDS experimental CIA spectrum on 2017/11/07
 
 % pressure of lowest level, below which is the adjustable surface layer
 if ~isfield(inp,'lowest_possible_Psurf')
@@ -46,13 +39,13 @@ end
 if ~isfield(inp,'nsublayer')
     inp.nsublayer = 3;
 end
+
 % use broadener or not
 if ~isfield(inp,'if_broadening')
     if_broadening = false;
 else
     if_broadening = inp.if_broadening;
 end
-
 varname = {'place_holder_useless','Pressure','Temperature','Wavenumber'};
 
 % Bolzmann constant in SI unit
@@ -113,8 +106,8 @@ field3 = 'common_grid';
 field4 = 'tau_struct';
 field5 = 'vRange';
 field6 = 'wRange';
-value1 = {'O2','CO2','CO2','CH4','CH4'};
-value2 = {1,1,2,1,2};
+value1 = {'O2','O2'};
+value2 = {0,1};
 window_list = struct(field1,value1,field2,value2,field3,[],field4,[],...
     field5,[],field6,[]);
 
@@ -196,6 +189,7 @@ for iwin = 1:length(window_list)
                 if molN == 1 && if_broadening% add self broadening for water
                     inp_interp.Bq = Csublayer(isublayer,4);
                 end
+                
                 eZ = Csublayer(isublayer,2)*1e5;% sublayer thickness, km->cm
                 eN = eVMR*(inp_interp.Pq*100)/kB/inp_interp.Tq*1e-6; % sublayer number density, mol/cm3
                 eTau = eN*F_interp_absco(inp_interp)*eZ; % sublayer optical depth
@@ -252,14 +246,22 @@ for iwin = 1:length(window_list)
             [~,~,bin] = histcounts(v_grid_gfit,vlow_gfit);
         end
         if sum(ismember(which_CIA,'hitran'))
-            temp = load([datadir,'Tijs_CIA_127.mat']);
+            if windowID == 1
+                temp = load([datadir,'Tijs_CIA_127.mat']);
+            elseif windowID == 0
+                temp = load([datadir,'Tijs_CIA_106.mat']);
+            end
             vlow_hitran = temp.ciawave;
             C_hitran = temp.ciaxsec;
             cia_temp_vec_hitran = temp.ciatemp;
             [xgrid_hitran,ygrid_hitran] = meshgrid(vlow_hitran,cia_temp_vec_hitran);
         end
         if sum(ismember(which_CIA,'sao'))
-            fid = fopen([datadir,'ani_127.table']);
+            if windowID == 1
+                fid = fopen([datadir,'ani_127.table']);
+            elseif windowID == 0
+                fid = fopen([datadir,'ani_127.table']);
+            end
             C_sao = cell2mat(textscan(fid,'%f%f%f%f%f%f%f','headerlines',1,'delimiter',' ',...
                 'multipledelimsasone',1));
             vlow_sao = C_sao(:,1);
@@ -299,6 +301,33 @@ for iwin = 1:length(window_list)
             end
             [xgrid_mate,ygrid_mate] = meshgrid(vlow_mate,[253 273 296]);
         end
+        if sum(ismember(which_CIA,'koenis'))
+            ciafname1 = [datadir,'O2Air-Koenis.cia'];
+            % ciafname1 = [datadir,'O2-Air_SN_126.cia'];
+            C_koenis = cell(1,1);
+            headers = cell(1,1);
+            lineN = nan(1,1);
+            ciaT = nan(1,1);
+            fid = fopen(ciafname1,'r');
+            count = 0;
+            while 1
+                count = count+1;
+                tline = fgetl(fid);
+                if ~ischar(tline)
+                    break;
+                end
+                headers{count} = tline;
+                temp = textscan(tline,'%s%f%f%f%f%f%f','Delimiter',' ','MultipleDelimsAsOne',1);
+                lineN(count) = temp{4};
+                ciaT(count) = temp{5};
+                C_koenis(count) = textscan(fid,'%f%f','Delimiter',' ','MultipleDelimsAsOne',1,...
+                    'collectoutput',1);
+            end
+            fclose(fid);
+            ciaT_koenis = ciaT;
+            vlow_koenis = C_koenis{1}(:,1);
+            C_koenis = C_koenis{1}(:,2);
+        end
         if sum(ismember(which_CIA,'gfit'))
             dtau_cntm_gfit = zeros(nlayer,length(common_grid),'single');
         end
@@ -307,6 +336,9 @@ for iwin = 1:length(window_list)
         end
         if sum(ismember(which_CIA,'mate'))
             dtau_cntm_mate = zeros(nlayer,length(common_grid),'single');
+        end
+        if sum(ismember(which_CIA,'koenis'))
+            dtau_cntm_koenis = zeros(nlayer,length(common_grid),'single');
         end
         if sum(ismember(which_CIA,'hitran'))
             dtau_cntm_hitran = zeros(nlayer,length(common_grid),'single');
@@ -360,6 +392,13 @@ for iwin = 1:length(window_list)
                 dtau_cntm_mate(ilayer,:) = N_ilayer^2*MR_O2*1e5*(C(ilayer,2)-C(ilayer+1,2))*...
                     interp1(vlow_mate,acia_low,common_grid);
             end
+            if sum(ismember(which_CIA,'koenis'))
+                acia_koenis = common_grid*0;
+                int = common_grid > min(vlow_koenis) & common_grid < max(vlow_koenis);
+                acia_koenis(int) = spline(vlow_koenis,C_koenis,common_grid(int));
+                dtau_cntm_koenis(ilayer,:) = N_ilayer^2*MR_O2*1e5*(C(ilayer,2)-C(ilayer+1,2))*...
+                    acia_koenis;
+            end
         end
         
         if sum(ismember(which_CIA,'gfit'))
@@ -373,6 +412,9 @@ for iwin = 1:length(window_list)
         end
         if sum(ismember(which_CIA,'mate'))
             window_list(iwin).tau_struct.O2.CIA_Mate = nansum(dtau_cntm_mate);
+        end
+        if sum(ismember(which_CIA,'koenis'))
+            window_list(iwin).tau_struct.O2.CIA_Koenis = nansum(dtau_cntm_koenis);
         end
     end
     disp(['Finished ',target_gas,' window ',num2str(windowID),' at ',datestr(now)])

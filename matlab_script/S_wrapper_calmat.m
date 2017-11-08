@@ -235,7 +235,7 @@ if last_fileN < 0 || (last_fileN >= 0 && fileN <= last_fileN)
                 input_nlinfit.s1(i_fit_spec,:) = double(tmp_tau_prof+tmp_tau_sfc);
             end
             % add O2 CIA for the O2 fitting window
-            if iwin == 1
+            if strcmpi(target_gas,'O2')
                 n_fit_spec = n_fit_spec+1;
                 tau_CIA = double(window_list(iwin).tau_struct.O2.(['CIA_',which_CIA]));
                 input_nlinfit.s1 = cat(1,input_nlinfit.s1,tau_CIA);

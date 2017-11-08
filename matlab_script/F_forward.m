@@ -9,6 +9,18 @@ ss = input_nlinfit.ss;
 s1 = input_nlinfit.s1;
 w2 = input_nlinfit.w2;
 
+% add fitting boundaries
+if isfield(input_nlinfit,'coeff_bound')
+    tmp = input_nlinfit.coeff_bound;
+    for ib = 1:size(tmp,2)
+        if coeff(ib) < tmp(1,ib)
+            coeff(ib) = tmp(1,ib);
+        elseif coeff(ib) > tmp(2,ib);
+            coeff(ib) = tmp(2,ib);
+        end
+    end
+end
+
 % optional inputs
 
 count = 1;
